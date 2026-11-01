@@ -16,6 +16,6 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Verify
-        run: ./mvnw -B clean verify
+        run: bash ./mvnw -B clean verify
       - name: Build container without publishing
         run: docker build --platform linux/amd64 -t lendup-reservations-service:ci .
