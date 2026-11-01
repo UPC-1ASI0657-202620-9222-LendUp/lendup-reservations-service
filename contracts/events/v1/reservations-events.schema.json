@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lendup.example/contracts/events/v1/reservations-events.schema.json",
+  "title": "LendUp Reservations emitted event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "event_version", "aggregate_version", "aggregate_id", "occurred_at", "correlation_id", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "enum": ["SolicitudCreada", "ReservaConfirmada", "CancelacionReservaSolicitada", "ReservaCancelada"] },
+    "event_version": { "const": 1 },
+    "aggregate_version": { "type": "integer", "minimum": 1 },
+    "aggregate_id": { "type": "string", "format": "uuid" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string", "maxLength": 100 },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    { "if": { "properties": { "event_type": { "const": "ReservaConfirmada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/reservaConfirmada" } } } },
+    { "if": { "properties": { "event_type": { "const": "CancelacionReservaSolicitada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/cancelacionSolicitada" } } } }
+  ],
+  "$defs": {
+    "reservaConfirmada": {
+      "type": "object",
+      "required": ["reserva_id", "solicitud_id", "publicacion_id", "prestamista_usuario_id", "prestatario_usuario_id", "desde", "hasta", "tarifa_diaria_acordada", "moneda_acordada", "lugar_intercambio_acordado", "condiciones_uso_acordadas", "condiciones_entrega_acordadas", "condiciones_devolucion_acordadas", "condiciones_cancelacion_acordadas"],
+      "properties": {
+        "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "publicacion_id": { "type": "string", "format": "uuid" },
+        "prestamista_usuario_id": { "type": "string", "format": "uuid" }, "prestatario_usuario_id": { "type": "string", "format": "uuid" },
+        "desde": { "type": "string", "format": "local-date-time" }, "hasta": { "type": "string", "format": "local-date-time" },
+        "tarifa_diaria_acordada": { "type": "number", "exclusiveMinimum": 0 }, "garantia_monetaria_acordada": { "type": ["number", "null"], "minimum": 0 }, "moneda_acordada": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "lugar_intercambio_acordado": { "type": "string" }, "condiciones_uso_acordadas": { "type": "string" }, "condiciones_entrega_acordadas": { "type": "string" }, "condiciones_devolucion_acordadas": { "type": "string" }, "condiciones_cancelacion_acordadas": { "type": "string" }
+      }
+    },
+    "cancelacionSolicitada": { "type": "object", "required": ["reserva_id", "solicitud_id", "solicitada_por_usuario_id", "motivo_cancelacion"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "solicitada_por_usuario_id": { "type": "string", "format": "uuid" }, "motivo_cancelacion": { "type": "string" } } }
+  }
+}

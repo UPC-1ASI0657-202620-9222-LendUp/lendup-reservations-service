@@ -1,0 +1,39 @@
+openapi: 3.1.0
+info: { title: LendUp Reservations API, version: 1.0.0 }
+servers: [{ url: /api/v1 }]
+security: [{ firebaseBearer: [] }]
+paths:
+  /solicitudes:
+    post:
+      operationId: crearSolicitud
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CrearSolicitud' } } } }
+      responses: { '201': { description: Creada }, '400': { description: Inválida }, '503': { description: Catálogo no disponible } }
+    get:
+      operationId: listarSolicitudes
+      parameters: [{ name: rol, in: query, schema: { type: string, enum: [PRESTAMISTA, PRESTATARIO] } }, { name: estado, in: query, schema: { type: string, enum: [PENDIENTE, ACEPTADA, RECHAZADA, CANCELADA] } }]
+      responses: { '200': { description: Lista } }
+  /solicitudes/{id}:
+    get: { operationId: obtenerSolicitud, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { description: Solicitud }, '404': { description: No encontrada } } }
+  /solicitudes/{id}/aceptacion:
+    post: { operationId: aceptarSolicitud, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '201': { description: Reserva confirmada }, '409': { description: Conflicto } } }
+  /solicitudes/{id}/rechazo:
+    post: { operationId: rechazarSolicitud, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/Rechazo' }, responses: { '200': { description: Rechazada } } }
+  /solicitudes/{id}/cancelacion:
+    post: { operationId: cancelarSolicitud, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/Cancelacion' }, responses: { '200': { description: Cancelada } } }
+  /reservas:
+    get: { operationId: listarReservas, parameters: [{ name: rol, in: query, schema: { type: string, enum: [PRESTAMISTA, PRESTATARIO] } }], responses: { '200': { description: Lista } } }
+  /reservas/{id}/cancelacion:
+    post: { operationId: solicitarCancelacionReserva, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/Cancelacion' }, responses: { '200': { description: Cancelación pendiente }, '409': { description: Conflicto } } }
+  /reservas/{id}/contacto:
+    get: { operationId: obtenerContacto, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { description: Contacto autorizado }, '503': { description: Identidad no disponible } } }
+components:
+  securitySchemes: { firebaseBearer: { type: http, scheme: bearer, bearerFormat: Firebase ID token } }
+  parameters: { Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } } }
+  requestBodies:
+    Rechazo: { content: { application/json: { schema: { type: object, properties: { motivo_rechazo: { type: string, maxLength: 1000 } } } } } }
+    Cancelacion: { content: { application/json: { schema: { type: object, properties: { motivo_cancelacion: { type: string, maxLength: 1000 } } } } } }
+  schemas:
+    CrearSolicitud:
+      type: object
+      required: [publicacion_id, desde, hasta]
+      properties: { publicacion_id: { type: string, format: uuid }, desde: { type: string, format: local-date-time }, hasta: { type: string, format: local-date-time } }

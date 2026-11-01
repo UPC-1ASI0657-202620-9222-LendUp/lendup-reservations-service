@@ -1,0 +1,73 @@
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+spring:
+  application:
+    name: lendup-reservations-service
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/lendup_reservas?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:lendup_reservas}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:25}
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+      hibernate.query.fail_on_pagination_over_collection_fetch: true
+  flyway:
+    enabled: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:}
+    password: ${RABBITMQ_PASSWORD:}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 500ms
+          multiplier: 2
+          max-interval: 2s
+  jackson:
+    default-property-inclusion: non_null
+management:
+  endpoints.web.exposure.include: health
+  endpoint.health:
+    probes.enabled: true
+    show-details: never
+springdoc:
+  api-docs.enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui.enabled: ${SPRINGDOC_ENABLED:false}
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID}
+lendup:
+  security:
+    cors-origins: ${CORS_ORIGINS:}
+    swagger-public: ${SWAGGER_PUBLIC:false}
+  outbox:
+    relay-delay-ms: ${OUTBOX_RELAY_DELAY_MS:1000}
+  integrations:
+    catalog:
+      base-url: ${CATALOG_SERVICE_BASE_URL:}
+      service-token: ${CATALOG_SERVICE_TOKEN:}
+      snapshot-uri-template: ${CATALOG_SNAPSHOT_URI_TEMPLATE:}
+      connect-timeout-ms: ${CATALOG_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${CATALOG_READ_TIMEOUT_MS:3000}
+    identity:
+      base-url: ${IDENTITY_SERVICE_BASE_URL:}
+      service-token: ${IDENTITY_SERVICE_TOKEN:}
+      firebase-user-uri-template: ${IDENTITY_FIREBASE_USER_URI_TEMPLATE:}
+      authorized-contact-uri-template: ${IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE:}
+      connect-timeout-ms: ${IDENTITY_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${IDENTITY_READ_TIMEOUT_MS:3000}
+logging:
+  config: classpath:logback-spring.xml

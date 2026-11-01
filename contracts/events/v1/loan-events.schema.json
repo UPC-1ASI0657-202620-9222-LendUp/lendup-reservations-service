@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lendup.example/contracts/events/v1/loan-events.schema.json",
+  "title": "Loan events consumed by Reservations v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "event_version", "aggregate_version", "aggregate_id", "occurred_at", "correlation_id", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "enum": ["PrestamoCancelado", "CancelacionRechazada", "PeriodoPrestamoLiberado"] },
+    "event_version": { "const": 1 }, "aggregate_version": { "type": "integer", "minimum": 1 },
+    "aggregate_id": { "type": "string", "format": "uuid" }, "occurred_at": { "type": "string", "format": "date-time" }, "correlation_id": { "type": "string" },
+    "payload": { "type": "object", "required": ["reserva_id"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "nuevo_hasta": { "type": "string", "format": "local-date-time" }, "motivo": { "type": "string" } } }
+  }
+}

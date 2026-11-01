@@ -1,0 +1,3 @@
+package com.lendup.reservas.infrastructure.persistence;
+import com.lendup.reservas.application.port.out.AuditPort; import com.lendup.reservas.infrastructure.persistence.entity.AuditEntity; import com.lendup.reservas.infrastructure.persistence.repository.AuditJpaRepository; import java.time.Clock; import java.util.UUID; import org.springframework.stereotype.Component;
+@Component public class AuditJpaAdapter implements AuditPort { private final AuditJpaRepository repo; private final Clock clock; public AuditJpaAdapter(AuditJpaRepository r,Clock c){repo=r;clock=c;} public void record(String t,UUID id,String action,String prev,String next,UUID actor,String corr){repo.save(new AuditEntity(UUID.randomUUID(),t,id,action,prev,next,actor,corr==null?"":corr,clock.instant()));} }

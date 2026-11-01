@@ -1,0 +1,17 @@
+# Eventos
+
+Exchange durable: `lendup.domain.events` (topic). DLX: `lendup.domain.events.dlx`. Cola consumidora: `reservations.loan-events.v1`; DLQ: `reservations.loan-events.v1.dlq`.
+
+| Dirección | Evento | Routing key | Propósito |
+|---|---|---|---|
+| Emite | `SolicitudCreada` v1 | `reservas.solicitud-creada.v1` | Notificaciones/proyecciones |
+| Emite | `ReservaConfirmada` v1 | `reservas.confirmada.v1` | Préstamos crea su agregado con snapshot |
+| Emite | `CancelacionReservaSolicitada` v1 | `reservas.cancelacion-solicitada.v1` | Préstamos decide según recepción/estado físico |
+| Emite | `ReservaCancelada` v1 | `reservas.cancelada.v1` | Proyecciones/notificaciones |
+| Consume | `PrestamoCancelado` v1 | `prestamos.cancelado.v1` | Cancela y libera periodo |
+| Consume | `CancelacionRechazada` v1 | `prestamos.cancelacion-rechazada.v1` | Conserva periodo y vuelve a confirmada |
+| Consume | `PeriodoPrestamoLiberado` v1 | `prestamos.periodo-liberado.v1` | Acorta futuro ocupado, idempotente |
+
+Envelope: `event_id`, `event_type`, `event_version`, `aggregate_version`, `aggregate_id`, `occurred_at` UTC, `correlation_id`, `payload`. Schemas y ejemplos están en `contracts/events/v1`.
+
+Los consumidores de Préstamos y Notificaciones del monolito inspeccionado todavía no implementan estos contratos; publicar no constituye una integración end-to-end exitosa.
