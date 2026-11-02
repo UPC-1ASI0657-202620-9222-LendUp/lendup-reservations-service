@@ -2,6 +2,7 @@ package com.lendup.reservas.infrastructure.persistence;
 
 import com.lendup.reservas.application.exception.NotFoundException;
 import com.lendup.reservas.application.port.out.ReservationPersistencePort;
+import com.lendup.reservas.domain.model.*;
 import com.lendup.reservas.infrastructure.persistence.entity.*;
 import com.lendup.reservas.infrastructure.persistence.repository.*;
 import java.time.LocalDateTime;
@@ -19,7 +20,9 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
   @Transactional(propagation=Propagation.REQUIRES_NEW)
   public void ensureAgenda(UUID publicationId){agendas.insertIfAbsent(UUID.randomUUID().toString(),publicationId.toString());}
   public AgendaEntity lockAgenda(UUID publicationId){return agendas.lockByPublicationId(publicationId).orElseThrow(()->new NotFoundException("Agenda no inicializada"));}
-  public boolean existsOverlap(UUID agendaId,LocalDateTime desde,LocalDateTime hasta){return reservas.existsOverlap(agendaId,desde,hasta);}
+  public List<AgendaDelObjeto.Bloqueo> findBlockingPeriods(UUID agendaId){return reservas.findBlockingByAgendaId(agendaId).stream().map(r->new AgendaDelObjeto.Bloqueo(r.getId(),new PeriodoPrestamo(r.getDesde(),r.getHasta()),r.getEstado())).toList();}
+  public boolean existsCommittedOverlap(UUID publicacionId,LocalDateTime desde,LocalDateTime hasta){return reservas.existsCommittedOverlap(publicacionId,desde,hasta);}
+  public boolean existsPendingDuplicate(UUID publicacionId,UUID prestatarioId,LocalDateTime desde,LocalDateTime hasta){return solicitudes.existsPendingDuplicate(publicacionId,prestatarioId,desde,hasta);}
   public ReservaEntity saveReserva(ReservaEntity e){return reservas.save(e);} public Optional<ReservaEntity> findReserva(UUID id){return reservas.findById(id);} public Optional<ReservaEntity> lockReserva(UUID id){return reservas.lockById(id);}
   public List<ReservaEntity> findReservas(UUID actor,boolean admin,String rol){return reservas.search(actor,admin,normalizeRole(rol));}
   private String normalizeRole(String rol){return rol==null?"":rol;}

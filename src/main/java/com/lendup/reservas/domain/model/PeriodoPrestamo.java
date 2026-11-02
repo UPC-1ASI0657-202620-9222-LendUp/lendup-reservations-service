@@ -16,8 +16,10 @@ public record PeriodoPrestamo(LocalDateTime desde, LocalDateTime hasta) {
   }
 
   public long bloquesIniciadosDe24Horas() {
-    long seconds = Duration.between(desde, hasta).getSeconds();
-    return Math.addExact(seconds, 86_399L) / 86_400L;
+    Duration duration = Duration.between(desde, hasta);
+    long fullBlocks = duration.getSeconds() / 86_400L;
+    boolean hasStartedBlock = duration.getSeconds() % 86_400L != 0 || duration.getNano() != 0;
+    return hasStartedBlock ? Math.incrementExact(fullBlocks) : fullBlocks;
   }
 
   public BigDecimal importe(BigDecimal tarifaDiaria) {

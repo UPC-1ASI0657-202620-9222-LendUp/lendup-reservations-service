@@ -27,13 +27,14 @@ paths:
   /reservas/{id}/contacto:
     get: { operationId: obtenerContacto, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { description: Contacto autorizado }, '503': { description: Identidad no disponible } } }
 components:
-  securitySchemes: { firebaseBearer: { type: http, scheme: bearer, bearerFormat: Firebase ID token } }
+  securitySchemes: { firebaseBearer: { type: http, scheme: bearer, bearerFormat: JWT, description: Firebase ID Token verificado por Firebase Admin SDK } }
   parameters: { Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } } }
   requestBodies:
-    Rechazo: { content: { application/json: { schema: { type: object, properties: { motivo_rechazo: { type: string, maxLength: 1000 } } } } } }
-    Cancelacion: { content: { application/json: { schema: { type: object, properties: { motivo_cancelacion: { type: string, maxLength: 1000 } } } } } }
+    Rechazo: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [motivo_rechazo], properties: { motivo_rechazo: { type: string, minLength: 1, maxLength: 1000 } } } } } }
+    Cancelacion: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [motivo_cancelacion], properties: { motivo_cancelacion: { type: string, minLength: 1, maxLength: 1000 } } } } } }
   schemas:
     CrearSolicitud:
       type: object
+      additionalProperties: false
       required: [publicacion_id, desde, hasta]
       properties: { publicacion_id: { type: string, format: uuid }, desde: { type: string, format: local-date-time }, hasta: { type: string, format: local-date-time } }

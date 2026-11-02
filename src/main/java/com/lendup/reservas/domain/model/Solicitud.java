@@ -1,6 +1,6 @@
 package com.lendup.reservas.domain.model;
 
-import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 public final class Solicitud {
@@ -14,9 +14,16 @@ public final class Solicitud {
 
   public Solicitud(UUID id, UUID publicacionId, UUID prestatarioId, UUID prestamistaId,
                    PeriodoPrestamo periodo, CondicionesAcordadas condiciones, EstadoSolicitud estado) {
+    Objects.requireNonNull(prestatarioId, "El prestatario es obligatorio");
+    Objects.requireNonNull(prestamistaId, "El prestamista es obligatorio");
     if (prestatarioId.equals(prestamistaId)) throw new IllegalArgumentException("No se puede solicitar un objeto propio");
-    this.id = id; this.publicacionId = publicacionId; this.prestatarioId = prestatarioId;
-    this.prestamistaId = prestamistaId; this.periodo = periodo; this.condiciones = condiciones; this.estado = estado;
+    this.id = Objects.requireNonNull(id, "El ID de solicitud es obligatorio");
+    this.publicacionId = Objects.requireNonNull(publicacionId, "La publicación es obligatoria");
+    this.prestatarioId = prestatarioId;
+    this.prestamistaId = prestamistaId;
+    this.periodo = Objects.requireNonNull(periodo, "El periodo es obligatorio");
+    this.condiciones = Objects.requireNonNull(condiciones, "Las condiciones son obligatorias");
+    this.estado = Objects.requireNonNull(estado, "El estado es obligatorio");
   }
   public void aceptar(UUID actor) { exigirPendiente(); if (!prestamistaId.equals(actor)) throw new SecurityException("Solo el prestamista acepta"); estado = EstadoSolicitud.ACEPTADA; }
   public void rechazar(UUID actor) { exigirPendiente(); if (!prestamistaId.equals(actor)) throw new SecurityException("Solo el prestamista rechaza"); estado = EstadoSolicitud.RECHAZADA; }

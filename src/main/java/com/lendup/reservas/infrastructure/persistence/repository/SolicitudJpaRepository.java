@@ -8,4 +8,6 @@ public interface SolicitudJpaRepository extends JpaRepository<SolicitudEntity,UU
   @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select s from SolicitudEntity s where s.id=:id") Optional<SolicitudEntity> lockById(@Param("id") UUID id);
   @Query("select s from SolicitudEntity s where (:admin=true or (:rol='PRESTAMISTA' and s.prestamistaUsuarioId=:actor) or (:rol='PRESTATARIO' and s.prestatarioUsuarioId=:actor) or (:rol='' and (s.prestamistaUsuarioId=:actor or s.prestatarioUsuarioId=:actor))) and (:estado='' or cast(s.estado as string)=:estado) order by s.creadaEn desc")
   List<SolicitudEntity> search(@Param("actor") UUID actor,@Param("admin") boolean admin,@Param("rol") String rol,@Param("estado") String estado);
+  @Query("select (count(s)>0) from SolicitudEntity s where s.publicacionId=:publicacionId and s.prestatarioUsuarioId=:prestatarioId and s.desde=:desde and s.hasta=:hasta and s.estado=com.lendup.reservas.domain.model.EstadoSolicitud.PENDIENTE")
+  boolean existsPendingDuplicate(@Param("publicacionId") UUID publicacionId,@Param("prestatarioId") UUID prestatarioId,@Param("desde") java.time.LocalDateTime desde,@Param("hasta") java.time.LocalDateTime hasta);
 }

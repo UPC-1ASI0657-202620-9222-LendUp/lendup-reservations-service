@@ -10,7 +10,7 @@
   </parent>
   <groupId>com.lendup</groupId>
   <artifactId>lendup-reservations-service</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.2.0-SNAPSHOT</version>
   <name>LendUp Reservations Service</name>
   <description>Reservations bounded context for LendUp</description>
   <properties>

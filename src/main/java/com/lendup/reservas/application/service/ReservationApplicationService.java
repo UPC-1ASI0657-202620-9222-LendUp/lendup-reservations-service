@@ -5,6 +5,8 @@ import com.lendup.reservas.application.port.in.ReservationUseCases;
 import com.lendup.reservas.application.port.out.*;
 import com.lendup.reservas.domain.event.EventEnvelope;
 import com.lendup.reservas.domain.model.*;
+import com.lendup.reservas.domain.specification.SolicitudSpecifications;
+import com.lendup.reservas.domain.specification.SolicitudSpecifications.*;
 import com.lendup.reservas.infrastructure.persistence.entity.*;
 import java.math.BigDecimal;
 import java.time.*;
@@ -21,19 +23,32 @@ public class ReservationApplicationService implements ReservationUseCases {
   private final OutboxPort outbox;
   private final AuditPort audit;
   private final Clock clock;
+  private final ReservaFactory reservaFactory;
 
   public ReservationApplicationService(ReservationPersistencePort persistence, CatalogoPort catalogo, IdentidadPort identidad,
-      OutboxPort outbox, AuditPort audit, Clock clock) {
-    this.persistence=persistence; this.catalogo=catalogo; this.identidad=identidad; this.outbox=outbox; this.audit=audit; this.clock=clock;
+      OutboxPort outbox, AuditPort audit, Clock clock, ReservaFactory reservaFactory) {
+    this.persistence=persistence; this.catalogo=catalogo; this.identidad=identidad; this.outbox=outbox; this.audit=audit; this.clock=clock; this.reservaFactory=reservaFactory;
   }
 
   @Override @Transactional
   public SolicitudView crearSolicitud(UUID actor, UUID publicacionId, LocalDateTime desde, LocalDateTime hasta) {
     PeriodoPrestamo periodo = new PeriodoPrestamo(desde, hasta);
     CatalogoPort.PublicacionSnapshot pub = catalogo.obtenerSnapshot(publicacionId, periodo);
-    if (!pub.activa()) throw new BusinessConflictException("Objeto no disponible");
-    if (!pub.periodoOfrecido()) throw new BusinessConflictException("Periodo fuera de la disponibilidad publicada");
+    var eligibility = new ElegibilidadSolicitud(
+        EstadoComprobacion.CUMPLE,
+        EstadoComprobacion.DESCONOCIDO,
+        EstadoComprobacion.DESCONOCIDO,
+        EstadoComprobacion.DESCONOCIDO,
+        pub.activa() ? EstadoComprobacion.CUMPLE : EstadoComprobacion.NO_CUMPLE,
+        pub.periodoOfrecido() ? EstadoComprobacion.CUMPLE : EstadoComprobacion.NO_CUMPLE);
+    var catalogRules = SolicitudSpecifications.publicacionActiva()
+        .and(SolicitudSpecifications.periodoDisponible())
+        .evaluate(eligibility);
+    if (catalogRules.violations().contains("PUBLICACION_NO_ACTIVA")) throw new BusinessConflictException("Objeto no disponible");
+    if (catalogRules.violations().contains("PERIODO_NO_DISPONIBLE")) throw new BusinessConflictException("Periodo fuera de la disponibilidad publicada");
     if (actor.equals(pub.propietarioId())) throw new BusinessConflictException("No puedes solicitar tu propio objeto");
+    if (persistence.existsCommittedOverlap(publicacionId, desde, hasta)) throw new BusinessConflictException("Periodo ya reservado");
+    if (persistence.existsPendingDuplicate(publicacionId, actor, desde, hasta)) throw new BusinessConflictException("Ya existe una solicitud pendiente para el mismo periodo");
     Instant now=clock.instant();
     SolicitudEntity entity=SolicitudEntity.nueva(UUID.randomUUID(), pub.id(), actor, pub.propietarioId(), periodo, pub.condiciones(), now);
     persistence.saveSolicitud(entity);
@@ -58,14 +73,17 @@ public class ReservationApplicationService implements ReservationUseCases {
     if(!actor.equals(s.getPrestamistaUsuarioId())) throw new ForbiddenException("Solo el prestamista puede aceptar");
     if(s.getEstado()!=EstadoSolicitud.PENDIENTE) throw new BusinessConflictException("Solicitud no pendiente");
     persistence.ensureAgenda(s.getPublicacionId());
-    AgendaEntity agenda=persistence.lockAgenda(s.getPublicacionId());
-    if(persistence.existsOverlap(agenda.getId(),s.getDesde(),s.getHasta())) throw new BusinessConflictException("Periodo ya reservado");
+    AgendaEntity agendaRow=persistence.lockAgenda(s.getPublicacionId());
+    AgendaDelObjeto agenda=new AgendaDelObjeto(agendaRow.getId(),agendaRow.getPublicacionId(),agendaRow.getVersion(),persistence.findBlockingPeriods(agendaRow.getId()));
     Instant now=clock.instant();
-    ReservaEntity r=ReservaEntity.confirmada(UUID.randomUUID(),s,agenda.getId(),now);
+    Reserva domain;
+    try { domain=reservaFactory.crearConfirmada(UUID.randomUUID(),s.toDomain(),agenda); }
+    catch(IllegalStateException ex){throw new BusinessConflictException(ex.getMessage());}
+    ReservaEntity r=ReservaEntity.confirmada(domain,s,now);
     try { persistence.saveReserva(r); } catch(DataIntegrityViolationException ex){ throw new BusinessConflictException("La solicitud ya tiene reserva"); }
     s.aceptar(now);
     persistence.saveSolicitud(s);
-    append("ReservaConfirmada",r.getId(),1,reservaConfirmadaPayload(r,s),"");
+    append("ReservaConfirmada",r.getId(),r.getAggregateVersion(),reservaConfirmadaPayload(r,s),"");
     audit.record("SOLICITUD",s.getId(),"ACEPTAR","PENDIENTE","ACEPTADA",actor,"");
     audit.record("RESERVA",r.getId(),"CONFIRMAR",null,"CONFIRMADA",actor,"");
     return ReservaView.from(r,s);
@@ -100,7 +118,7 @@ public class ReservationApplicationService implements ReservationUseCases {
     authorize(actor,admin,r.getSolicitud());
     if(r.getEstado()!=EstadoReserva.CONFIRMADA) throw new BusinessConflictException("Reserva no confirmada");
     r.solicitarCancelacion(actor,motivo,clock.instant()); persistence.saveReserva(r);
-    append("CancelacionReservaSolicitada",id,1,Map.of("reserva_id",id,"solicitud_id",r.getSolicitud().getId(),
+    append("CancelacionReservaSolicitada",id,r.getAggregateVersion(),Map.of("reserva_id",id,"solicitud_id",r.getSolicitud().getId(),
         "solicitada_por_usuario_id",actor,"motivo_cancelacion",motivo==null?"":motivo),correlationId);
     audit.record("RESERVA",id,"SOLICITAR_CANCELACION","CONFIRMADA","CANCELACION_PENDIENTE",actor,correlationId);
     return ReservaView.from(r,r.getSolicitud());
@@ -129,7 +147,7 @@ public class ReservationApplicationService implements ReservationUseCases {
       BigDecimal tarifaDiariaAceptada,BigDecimal garantiaMonetariaAceptada,String monedaAceptada,String lugarIntercambioAceptado,String condicionesUsoAceptadas,
       String condicionesEntregaAceptadas,String condicionesDevolucionAceptadas,String condicionesCancelacionAceptadas,Instant condicionesAceptadasEn,Instant creadaEn,Instant respondidaEn,
       String motivoRechazo,Instant canceladaEn,String motivoCancelacion,Instant actualizadaEn){
-    public static SolicitudView from(SolicitudEntity s){return new SolicitudView(s.getId(),s.getPublicacionId(),s.getPrestatarioUsuarioId(),s.getPrestamistaUsuarioId(),s.getDesde(),s.getHasta(),s.getEstado().name(),s.getTarifaDiariaAceptada(),s.getGarantiaMonetariaAceptada(),s.getMonedaAceptada(),s.getLugarIntercambioAceptado(),s.getCondicionesUsoAceptadas(),s.getCondicionesEntregaAceptadas(),s.getCondicionesDevolucionAceptadas(),s.getCondicionesCancelacionAceptadas(),s.getCondicionesAceptadasEn(),s.getCreadaEn(),s.getRespondidaEn(),s.getMotivoRechazo(),s.getCanceladaEn(),s.getMotivoCancelacion(),s.getActualizadaEn());}
+    public static SolicitudView from(SolicitudEntity s){return new SolicitudView(s.getId(),s.getPublicacionId(),s.getPrestatarioUsuarioId(),s.getPrestamistaUsuarioId(),s.getDesde(),s.getHasta(),s.getEstado().name(),s.getTarifaDiariaAceptada(),s.getGarantiaMonetariaAceptada(),s.getMonedaAceptada(),s.getLugarIntercambioAceptado(),s.getCondicionesUsoAceptadas(),s.getCondicionesEntregaAceptadas(),s.getCondicionesDevolucionAceptadas(),s.getCondicionesCancelacionAceptadas(),s.isConsentimientoVerificado()?s.getCondicionesAceptadasEn():null,s.getCreadaEn(),s.getRespondidaEn(),s.getMotivoRechazo(),s.getCanceladaEn(),s.getMotivoCancelacion(),s.getActualizadaEn());}
   }
   public record ReservaView(UUID id,UUID solicitudId,UUID agendaId,LocalDateTime desde,LocalDateTime hasta,String estado,BigDecimal tarifaDiariaAcordada,BigDecimal garantiaMonetariaAcordada,String monedaAcordada,String lugarIntercambioAcordado,String condicionesUsoAcordadas,String condicionesEntregaAcordadas,String condicionesDevolucionAcordadas,String condicionesCancelacionAcordadas,Instant confirmadaEn,Instant cancelacionSolicitadaEn,Instant canceladaEn,UUID canceladaPorUsuarioId,String motivoCancelacion,Instant actualizadaEn){
     public static ReservaView from(ReservaEntity r,SolicitudEntity ignored){return new ReservaView(r.getId(),r.getSolicitud().getId(),r.getAgendaId(),r.getDesde(),r.getHasta(),r.getEstado().name(),r.getTarifaDiariaAcordada(),r.getGarantiaMonetariaAcordada(),r.getMonedaAcordada(),r.getLugarIntercambioAcordado(),r.getCondicionesUsoAcordadas(),r.getCondicionesEntregaAcordadas(),r.getCondicionesDevolucionAcordadas(),r.getCondicionesCancelacionAcordadas(),r.getConfirmadaEn(),r.getCancelacionSolicitadaEn(),r.getCanceladaEn(),r.getCanceladaPorUsuarioId(),r.getMotivoCancelacion(),r.getActualizadaEn());}
