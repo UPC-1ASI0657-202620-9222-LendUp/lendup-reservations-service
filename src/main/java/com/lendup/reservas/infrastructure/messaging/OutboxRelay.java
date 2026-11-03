@@ -3,6 +3,8 @@ package com.lendup.reservas.infrastructure.messaging;
 import com.lendup.reservas.config.RabbitConfiguration;
 import com.lendup.reservas.infrastructure.persistence.entity.OutboxEventEntity;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -13,18 +15,19 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class OutboxRelay {
   private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
-  private static final int BATCH_SIZE = 50;
+  private static final int BATCH_SIZE = 10;
   private final OutboxBatchStore store;
   private final RabbitTemplate rabbit;
   private final JsonMapper json;
   private final Clock clock;
   private final int maxAttempts;
+  private final String instanceId = java.util.UUID.randomUUID().toString();
+  private static final Duration CLAIM_LEASE = Duration.ofMinutes(2);
 
   public OutboxRelay(OutboxBatchStore store, RabbitTemplate rabbit, JsonMapper json, Clock clock,
       @Value("${lendup.outbox.max-attempts:10}") int maxAttempts) {
@@ -36,23 +39,28 @@ public class OutboxRelay {
   }
 
   @Scheduled(fixedDelayString = "${lendup.outbox.relay-delay-ms:1000}")
-  @Transactional
   public void relay() {
-    for (OutboxEventEntity event : store.lockPending(BATCH_SIZE, maxAttempts)) {
+    Instant now = clock.instant();
+    for (OutboxEventEntity event : store.claimPending(instanceId, now,
+        now.minus(CLAIM_LEASE), BATCH_SIZE, maxAttempts)) {
       try {
         publish(event);
-        event.published(clock.instant());
+        if (!store.markPublished(event.getId(), instanceId, clock.instant())) {
+          log.warn("outbox_claim_lost event_id={} event_type={}", event.getId(), event.getEventType());
+        }
       } catch (Exception exception) {
-        event.failed(exception.getMessage());
-        if (event.getAttempts() >= maxAttempts) {
+        int attempts = event.getAttempts() + 1;
+        long delaySeconds = Math.min(300, 1L << Math.min(attempts, 8));
+        store.markFailed(event.getId(), instanceId, exception.getClass().getSimpleName(),
+            clock.instant().plusSeconds(delaySeconds));
+        if (attempts >= maxAttempts) {
           log.error("outbox_event_exhausted event_id={} event_type={} attempts={} error_type={}",
-              event.getId(), event.getEventType(), event.getAttempts(), exception.getClass().getSimpleName());
+              event.getId(), event.getEventType(), attempts, exception.getClass().getSimpleName());
         } else {
           log.warn("outbox_publish_failed event_id={} event_type={} attempts={} error_type={}",
-              event.getId(), event.getEventType(), event.getAttempts(), exception.getClass().getSimpleName());
+              event.getId(), event.getEventType(), attempts, exception.getClass().getSimpleName());
         }
       }
-      store.save(event);
     }
   }
 
@@ -88,6 +96,8 @@ public class OutboxRelay {
       case "ReservaConfirmada" -> "reservas.confirmada.v1";
       case "CancelacionReservaSolicitada" -> "reservas.cancelacion-solicitada.v1";
       case "ReservaCancelada" -> "reservas.cancelada.v1";
+      case "SolicitudRechazada" -> "reservas.solicitud-rechazada.v1";
+      case "SolicitudCancelada" -> "reservas.solicitud-cancelada.v1";
       default -> throw new IllegalArgumentException("Tipo de evento Outbox no soportado");
     };
   }

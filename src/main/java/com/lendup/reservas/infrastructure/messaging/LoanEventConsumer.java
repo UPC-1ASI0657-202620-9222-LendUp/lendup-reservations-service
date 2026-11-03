@@ -4,7 +4,8 @@ import com.lendup.reservas.application.exception.NotFoundException;
 import com.lendup.reservas.application.port.out.*;
 import com.lendup.reservas.config.RabbitConfiguration;
 import com.lendup.reservas.domain.event.EventEnvelope;
-import com.lendup.reservas.infrastructure.persistence.entity.ReservaEntity;
+import com.lendup.reservas.domain.model.Reserva;
+import com.lendup.reservas.domain.model.Solicitud;
 import com.lendup.reservas.infrastructure.persistence.repository.ProcessedEventJpaRepository;
 import java.time.*;
 import java.util.*;
@@ -47,27 +48,38 @@ public class LoanEventConsumer {
     rawMap.forEach((key,value)->payload.put(String.valueOf(key),value));
     UUID reservationId=uuid(payload,"reserva_id");
     LocalDateTime releasedUntil=null;
-    if(type.equals("PeriodoPrestamoLiberado")) releasedUntil=LocalDateTime.parse(requiredText(payload,"nuevo_hasta"));
+    if(type.equals("PeriodoPrestamoLiberado")) {
+      releasedUntil=LocalDateTime.parse(requiredText(payload,"nuevo_hasta"));
+      requireReleaseProof(payload);
+    }
     Instant now=clock.instant();
     if(processed.tryRegister(eventId.toString(),CONSUMER,reservationId.toString(),aggregateVersion,now)==0) return;
-    ReservaEntity reservation=persistence.lockReserva(reservationId).orElseThrow(()->new NotFoundException("Reserva de evento no encontrada"));
-    String previous=reservation.getEstado().name();
+    Reserva reservation=persistence.lockReserva(reservationId).orElseThrow(()->new NotFoundException("Reserva de evento no encontrada"));
+    Solicitud request=persistence.findSolicitudForReserva(reservationId).orElseThrow(()->new NotFoundException("Solicitud de reserva no encontrada"));
+    String previous=reservation.estado().name();
     LocalDateTime finalReleasedUntil=releasedUntil;
     boolean changed=switch(type){
       case "PrestamoCancelado"->reservation.aplicarPrestamoCancelado(aggregateVersion,now);
       case "CancelacionRechazada"->reservation.aplicarCancelacionRechazada(aggregateVersion,now);
-      case "PeriodoPrestamoLiberado"->reservation.aplicarLiberacion(aggregateVersion,finalReleasedUntil,now);
+      case "PeriodoPrestamoLiberado"->reservation.aplicarLiberacionConfirmada(aggregateVersion,finalReleasedUntil,now);
       default->false;
     };
     if(changed){
-      persistence.saveReserva(reservation);
+      persistence.saveReserva(reservation,request);
       String correlation=String.valueOf(event.getOrDefault("correlation_id",""));
-      audit.record("RESERVA",reservationId,"APLICAR_"+type,previous,reservation.getEstado().name(),null,correlation);
-      if(type.equals("PrestamoCancelado")) outbox.append(new EventEnvelope(UUID.randomUUID(),"ReservaCancelada",1,reservation.getAggregateVersion(),reservationId,now,correlation,Map.of("reserva_id",reservationId,"solicitud_id",reservation.getSolicitud().getId())));
+      audit.record("RESERVA",reservationId,"APLICAR_"+type,previous,reservation.estado().name(),null,correlation);
+      if(type.equals("PrestamoCancelado")) outbox.append(new EventEnvelope(UUID.randomUUID(),"ReservaCancelada",1,reservation.aggregateVersion(),reservationId,now,correlation,Map.of("reserva_id",reservationId,"solicitud_id",request.id())));
     }
   }
 
   private static UUID uuid(Map<String,Object> values,String key){return UUID.fromString(requiredText(values,key));}
   private static String requiredText(Map<String,Object> values,String key){Object value=values.get(key);if(value==null||value.toString().isBlank())throw new IllegalArgumentException("Campo obligatorio ausente: "+key);return value.toString();}
   private static Number number(Map<String,Object> values,String key){Object value=values.get(key);if(!(value instanceof Number number))throw new IllegalArgumentException("Campo numérico inválido: "+key);return number;}
+  private static void requireReleaseProof(Map<String,Object> payload){
+    if(!"LIBERACION_CONFIRMADA".equals(payload.get("decision"))
+        ||!Boolean.TRUE.equals(payload.get("devolucion_confirmada_por_prestamista"))
+        ||!Boolean.FALSE.equals(payload.get("incidencias_pendientes"))){
+      throw new IllegalArgumentException("La liberación no contiene evidencia autoritativa suficiente");
+    }
+  }
 }
