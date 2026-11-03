@@ -7,7 +7,7 @@ paths:
     post:
       operationId: crearSolicitud
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CrearSolicitud' } } } }
-      responses: { '201': { description: Creada }, '400': { description: Inválida }, '503': { description: Catálogo no disponible } }
+      responses: { '201': { description: Creada }, '400': { description: Inválida }, '403': { description: Estudiante no elegible }, '409': { description: Snapshot obsoleto o conflicto }, '503': { description: Identidad o Catálogo no disponible } }
     get:
       operationId: listarSolicitudes
       parameters: [{ name: rol, in: query, schema: { type: string, enum: [PRESTAMISTA, PRESTATARIO] } }, { name: estado, in: query, schema: { type: string, enum: [PENDIENTE, ACEPTADA, RECHAZADA, CANCELADA] } }]
@@ -36,5 +36,16 @@ components:
     CrearSolicitud:
       type: object
       additionalProperties: false
-      required: [publicacion_id, desde, hasta]
-      properties: { publicacion_id: { type: string, format: uuid }, desde: { type: string, format: local-date-time }, hasta: { type: string, format: local-date-time } }
+      required: [publicacion_id, desde, hasta, aceptacion_condiciones]
+      properties:
+        publicacion_id: { type: string, format: uuid }
+        desde: { type: string, format: local-date-time }
+        hasta: { type: string, format: local-date-time }
+        aceptacion_condiciones:
+          type: object
+          additionalProperties: false
+          required: [snapshot_id, snapshot_hash, aceptada]
+          properties:
+            snapshot_id: { type: string, minLength: 1, maxLength: 100 }
+            snapshot_hash: { type: string, pattern: '^[0-9a-fA-F]{64}$' }
+            aceptada: { const: true }

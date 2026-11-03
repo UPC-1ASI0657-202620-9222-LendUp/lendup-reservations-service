@@ -19,7 +19,11 @@ public class CatalogoRestAdapter implements CatalogoPort {
       @SuppressWarnings("unchecked") Map<String,Object> row=client.get().uri(config.snapshotUriTemplate(),id,periodo.desde(),periodo.hasta()).header("Authorization","Bearer "+config.serviceToken()).retrieve().body(Map.class);
       if(row==null)throw new DependencyUnavailableException("Catálogo devolvió una respuesta vacía");
       CondicionesAcordadas c=new CondicionesAcordadas(decimal(row,"tarifa_diaria"),nullableDecimal(row,"garantia_monetaria"),text(row,"moneda"),text(row,"lugar_intercambio"),text(row,"condiciones_uso"),text(row,"condiciones_entrega"),text(row,"condiciones_devolucion"),text(row,"condiciones_cancelacion"));
-      return new PublicacionSnapshot(UUID.fromString(text(row,"id")),UUID.fromString(text(row,"propietario_usuario_id")),"ACTIVA".equals(text(row,"estado")),Boolean.TRUE.equals(row.get("periodo_ofrecido")),c);
+      UUID returnedId=UUID.fromString(text(row,"id"));
+      if(!id.equals(returnedId))throw new DependencyUnavailableException("Catálogo devolvió una publicación distinta");
+      return new PublicacionSnapshot(returnedId,UUID.fromString(text(row,"propietario_usuario_id")),
+          "ACTIVA".equals(text(row,"estado")),Boolean.TRUE.equals(row.get("periodo_ofrecido")),
+          text(row,"snapshot_id"),text(row,"snapshot_hash"),c);
     }catch(DependencyUnavailableException e){throw e;}catch(Exception e){throw new DependencyUnavailableException("Catálogo no disponible",e);}
   }
   private static String text(Map<String,Object> m,String k){Object v=m.get(k);if(v==null)throw new DependencyUnavailableException("Catálogo omitió "+k);return v.toString();}

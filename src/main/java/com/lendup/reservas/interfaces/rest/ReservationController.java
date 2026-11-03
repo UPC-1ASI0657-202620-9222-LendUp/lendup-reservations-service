@@ -1,6 +1,7 @@
 package com.lendup.reservas.interfaces.rest;
 
 import com.lendup.reservas.application.port.in.ReservationUseCases;
+import com.lendup.reservas.application.port.in.ReservationModels.CrearSolicitudCommand;
 import com.lendup.reservas.config.security.ActorContext;
 import com.lendup.reservas.interfaces.rest.dto.RequestDtos.*;
 import com.lendup.reservas.interfaces.rest.dto.ResponseDtos.*;
@@ -20,7 +21,7 @@ public class ReservationController {
   private final ReservationUseCases useCases; private final ActorContext actor;
   public ReservationController(ReservationUseCases u,ActorContext a){useCases=u;actor=a;}
   @PostMapping("/solicitudes") @Operation(operationId="crearSolicitud",summary="Crear solicitud",responses={@ApiResponse(responseCode="201",description="Solicitud creada"),@ApiResponse(responseCode="400",description="Solicitud inválida"),@ApiResponse(responseCode="409",description="Conflicto de negocio"),@ApiResponse(responseCode="503",description="Dependencia no disponible")})
-  ResponseEntity<SolicitudResponse> create(@Valid @RequestBody CrearSolicitud b){return ResponseEntity.status(HttpStatus.CREATED).body(SolicitudResponse.from(useCases.crearSolicitud(actor.userId(),b.publicacion_id(),b.desde(),b.hasta())));}
+  ResponseEntity<SolicitudResponse> create(@Valid @RequestBody CrearSolicitud b){var acceptance=b.aceptacion_condiciones();var command=new CrearSolicitudCommand(actor.userId(),actor.emailVerified(),b.publicacion_id(),b.desde(),b.hasta(),acceptance.snapshot_id(),acceptance.snapshot_hash(),acceptance.aceptada());return ResponseEntity.status(HttpStatus.CREATED).body(SolicitudResponse.from(useCases.crearSolicitud(command)));}
   @GetMapping("/solicitudes") @Operation(operationId="listarSolicitudes",summary="Listar solicitudes") List<SolicitudResponse> requests(@RequestParam(required=false) @Pattern(regexp="PRESTAMISTA|PRESTATARIO") String rol,@RequestParam(required=false) @Pattern(regexp="PENDIENTE|ACEPTADA|RECHAZADA|CANCELADA") String estado){return useCases.listarSolicitudes(actor.userId(),actor.administrator(),rol,estado).stream().map(SolicitudResponse::from).toList();}
   @GetMapping("/solicitudes/{id}") @Operation(operationId="obtenerSolicitud",summary="Obtener solicitud") SolicitudResponse request(@PathVariable UUID id){return SolicitudResponse.from(useCases.obtenerSolicitud(actor.userId(),actor.administrator(),id));}
   @PostMapping("/solicitudes/{id}/aceptacion") @Operation(operationId="aceptarSolicitud",summary="Aceptar solicitud",responses={@ApiResponse(responseCode="201",description="Reserva confirmada"),@ApiResponse(responseCode="409",description="Estado o periodo incompatible")}) ResponseEntity<ReservaResponse> accept(@PathVariable UUID id){return ResponseEntity.status(HttpStatus.CREATED).body(ReservaResponse.from(useCases.aceptarSolicitud(actor.userId(),id)));}

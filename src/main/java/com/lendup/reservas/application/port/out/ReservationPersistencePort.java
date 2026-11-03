@@ -1,24 +1,26 @@
 package com.lendup.reservas.application.port.out;
 
-import com.lendup.reservas.infrastructure.persistence.entity.*;
 import com.lendup.reservas.domain.model.AgendaDelObjeto;
+import com.lendup.reservas.domain.model.Reserva;
+import com.lendup.reservas.domain.model.Solicitud;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface ReservationPersistencePort {
-  SolicitudEntity saveSolicitud(SolicitudEntity entity);
-  Optional<SolicitudEntity> findSolicitud(UUID id);
-  Optional<SolicitudEntity> lockSolicitud(UUID id);
-  List<SolicitudEntity> findSolicitudes(UUID actor, boolean admin, String rol, String estado);
+  Solicitud saveSolicitud(Solicitud solicitud);
+  Optional<Solicitud> findSolicitud(UUID id);
+  Optional<Solicitud> lockSolicitud(UUID id);
+  List<Solicitud> findSolicitudes(UUID actor, boolean admin, String rol, String estado);
   void ensureAgenda(UUID publicacionId);
-  AgendaEntity lockAgenda(UUID publicacionId);
-  List<AgendaDelObjeto.Bloqueo> findBlockingPeriods(UUID agendaId);
+  AgendaDelObjeto lockAgenda(UUID publicacionId);
   boolean existsCommittedOverlap(UUID publicacionId, LocalDateTime desde, LocalDateTime hasta);
-  boolean existsPendingDuplicate(UUID publicacionId, UUID prestatarioId, LocalDateTime desde, LocalDateTime hasta);
-  ReservaEntity saveReserva(ReservaEntity entity);
-  Optional<ReservaEntity> findReserva(UUID id);
-  Optional<ReservaEntity> lockReserva(UUID id);
-  List<ReservaEntity> findReservas(UUID actor, boolean admin, String rol);
+  boolean existsPendingDuplicate(UUID publicacionId, UUID prestatarioId,
+      LocalDateTime desde, LocalDateTime hasta);
+  Reserva saveReserva(Reserva reserva, Solicitud solicitud);
+  Optional<Reserva> findReserva(UUID id);
+  Optional<Reserva> lockReserva(UUID id);
+  Optional<Solicitud> findSolicitudForReserva(UUID reservaId);
+  List<Reserva> findReservas(UUID actor, boolean admin, String rol);
 }

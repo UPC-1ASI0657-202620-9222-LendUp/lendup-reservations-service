@@ -6,5 +6,7 @@ import java.util.UUID;
 
 public interface CatalogoPort {
   PublicacionSnapshot obtenerSnapshot(UUID publicacionId, PeriodoPrestamo periodo);
-  record PublicacionSnapshot(UUID id, UUID propietarioId, boolean activa, boolean periodoOfrecido, CondicionesAcordadas condiciones) {}
+  record PublicacionSnapshot(UUID id, UUID propietarioId, boolean activa,
+      boolean periodoOfrecido, String snapshotId, String snapshotHash,
+      CondicionesAcordadas condiciones) {}
 }
