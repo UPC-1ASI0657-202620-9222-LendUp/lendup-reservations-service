@@ -22,5 +22,9 @@ class OpenApiConfigurationTest {
     String contract = Files.readString(Path.of("contracts/openapi/reservations-v1.yaml"));
     assertTrue(contract.contains("firebaseBearer: { type: http, scheme: bearer, bearerFormat: JWT,"));
     assertEquals(9, contract.split("operationId:", -1).length - 1);
+    assertAll(
+        () -> assertTrue(contract.contains("required: [publicacion_id, desde, hasta, aceptacion_condiciones]")),
+        () -> assertTrue(contract.contains("required: [snapshot_id, snapshot_hash, aceptada]")),
+        () -> assertTrue(contract.contains("aceptada: { const: true }")));
   }
 }

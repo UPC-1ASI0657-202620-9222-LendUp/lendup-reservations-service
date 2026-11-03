@@ -25,8 +25,7 @@ class OutboxRelayTest {
     assertAll(
         ()->assertNull(event.getPublishedAt()),
         ()->assertEquals(1,event.getAttempts()),
-        ()->assertNotNull(event.getLastError()),
-        ()->assertSame(event,store.saved));
+        ()->assertNotNull(event.getLastError()));
   }
 
   @Test void tipoDesconocidoSeAgotaSinPublicarse() {
@@ -57,9 +56,9 @@ class OutboxRelayTest {
 
   private static final class InMemoryStore implements OutboxBatchStore {
     private final OutboxEventEntity event;
-    private OutboxEventEntity saved;
     private InMemoryStore(OutboxEventEntity event){this.event=event;}
-    @Override public List<OutboxEventEntity> lockPending(int limit,int maxAttempts){return event.getAttempts()<maxAttempts?List.of(event):List.of();}
-    @Override public void save(OutboxEventEntity event){saved=event;}
+    @Override public List<OutboxEventEntity> claimPending(String owner,Instant now,Instant staleBefore,int limit,int maxAttempts){if(event.getPublishedAt()!=null||event.getAttempts()>=maxAttempts)return List.of();event.claim(owner,now);return List.of(event);}
+    @Override public boolean markPublished(UUID id,String owner,Instant now){event.completeClaim(owner,now);return event.getPublishedAt()!=null;}
+    @Override public boolean markFailed(UUID id,String owner,String error,Instant nextAttempt){event.failClaim(owner,error,nextAttempt);return true;}
   }
 }
