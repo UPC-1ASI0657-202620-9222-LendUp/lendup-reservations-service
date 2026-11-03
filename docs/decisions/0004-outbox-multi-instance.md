@@ -2,4 +2,4 @@
 
 Estado: aceptada.
 
-Cada relay reclama hasta 50 filas pendientes mediante `SELECT ... FOR UPDATE SKIP LOCKED`, publica con flag obligatorio y publisher confirms, y marca la fila dentro de la misma transacción. Esto evita trabajo simultáneo sobre una fila entre instancias. Un crash después del publish y antes del commit todavía puede duplicar: la garantía es al menos una vez. Inbox usa un `INSERT IGNORE` transaccional sobre `event_id`; el productor y consumidor mantienen `aggregate_version` monotónica para descartar eventos atrasados.
+Cada relay reclama hasta 10 filas mediante una transacción corta con `SELECT ... FOR UPDATE SKIP LOCKED`, asigna un lease y confirma. Publica fuera de la transacción usando mandatory routing y publisher confirms; después marca éxito o fallo en otra transacción. Los leases vencidos son recuperables, el backoff es acotado y una fila no adelanta versiones anteriores sin publicar del mismo agregado. Un crash después del publish y antes del marcado puede duplicar: la garantía es al menos una vez. Inbox usa `INSERT IGNORE` transaccional sobre `event_id` y `aggregate_version` monotónica descarta eventos atrasados.

@@ -35,13 +35,15 @@ flowchart LR
 
 La confirmación publica `ReservaConfirmada` mediante outbox. La solicitud de cancelación conserva el periodo bloqueado y publica `CancelacionReservaSolicitada`. Solo `PrestamoCancelado` cambia la reserva a `CANCELADA`; `CancelacionRechazada` la devuelve a `CONFIRMADA`. `PeriodoPrestamoLiberado` puede acortar un intervalo futuro. Inbox deduplica `event_id` y `aggregate_version` evita aplicar mensajes atrasados.
 
-RabbitMQ ofrece entrega al menos una vez, no exactamente una vez. El relay reclama lotes mediante `FOR UPDATE SKIP LOCKED`, usa publicación obligatoria, publisher confirms y detección de retornos sin ruta. Un crash después de publicar y antes de confirmar DB puede duplicar; los consumidores deben ser idempotentes. Los fallos quedan pendientes hasta `OUTBOX_MAX_ATTEMPTS` y los agotados se registran sin payload. Inbox registra primero con `INSERT IGNORE` dentro de la misma transacción para deduplicar procesos concurrentes. El listener usa retry acotado y DLQ durable.
+RabbitMQ ofrece entrega al menos una vez, no exactamente una vez. El relay reclama lotes en una transacción corta mediante `FOR UPDATE SKIP LOCKED`, publica fuera del bloqueo con mandatory routing/publisher confirms y marca el resultado en otra transacción. Los leases vencidos son recuperables y no se adelanta una versión sobre otra pendiente del mismo agregado. Un crash después de publicar y antes de confirmar DB puede duplicar; los consumidores deben ser idempotentes. Los fallos quedan pendientes hasta `OUTBOX_MAX_ATTEMPTS` y los agotados se registran sin payload. Inbox registra primero con `INSERT IGNORE` dentro de la misma transacción para deduplicar procesos concurrentes. El listener usa retry acotado y DLQ durable.
 
 ## Elegibilidad y consentimiento
 
-`SolicitudSpecifications` distingue correo Firebase, verificación institucional, términos generales, condiciones concretas, publicación activa y periodo disponible. Hoy solo correo Firebase (en la frontera de seguridad) y hechos de Catálogo tienen fuentes confirmadas. Los hechos de Identidad/consentimiento permanecen `DESCONOCIDO` y no se convierten en `CUMPLE`. Para no romper las nueve operaciones mientras se acuerdan contratos, todavía no bloquean creación; esta limitación está explícita en `docs/integration-contracts.md`.
+`SolicitudSpecifications` distingue correo Firebase, verificación institucional, términos generales, condiciones concretas, publicación activa y periodo disponible. Todas se ejecutan antes de crear. Los hechos desconocidos no se convierten en `CUMPLE`: una integración ausente o incompleta produce 503; un usuario no elegible produce 403; un snapshot obsoleto produce 409.
 
-V2 vuelve nullable `condiciones_aceptadas_en` y agrega `consentimiento_verificado`. Las solicitudes nuevas del contrato vigente no inventan evidencia: retornan `condiciones_aceptadas_en=null`. Los valores históricos no se borran, pero tampoco se exponen como consentimiento verificado mientras la marca sea falsa.
+V2 vuelve nullable `condiciones_aceptadas_en`. V3 añade ID/hash SHA-256 del snapshot y registra la aceptación con reloj del servidor. Las filas históricas conservan sus datos y no reciben evidencia ficticia. La reserva copia esa referencia y el snapshot económico/textual de forma inmutable.
+
+`Reserva` separa el periodo contractual (`desde`/`hasta`) de la ocupación vigente. `PeriodoPrestamoLiberado` solo acorta `ocupacion_hasta` si Préstamos declara decisión final, devolución confirmada por el prestamista y ausencia de incidencias; nunca sobrescribe el periodo contractual.
 
 ## Seguridad
 

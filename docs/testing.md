@@ -10,7 +10,9 @@
 
 Las pruebas Testcontainers llevan `disabledWithoutDocker=true`: se marcan omitidas cuando Docker no existe. Una omisión no equivale a éxito. La suite automatiza MySQL y RabbitMQ; una prueba end-to-end entre repositorios sigue dependiendo de que Préstamos adopte el contrato publicado.
 
-Última verificación local de esta rama, 2026-11-01: 43 pruebas unitarias y 18 de integración, 61 en total, 0 fallos, 0 errores y 0 omitidas. Se ejecutaron Testcontainers con MySQL 8.4 y RabbitMQ 4.1. Flyway aplicó V1 y V2 desde un esquema vacío. Docker Compose posterior dejó los tres contenedores `healthy`; liveness/readiness respondieron 200. Estos datos no son una prueba de carga.
+Última verificación Maven local de esta rama, 2026-11-01: 53 pruebas unitarias y 20 de integración, 73 en total, 0 fallos, 0 errores y 0 omitidas. Se ejecutaron Testcontainers con MySQL 8.4 y RabbitMQ 4.1. Flyway aplicó V1–V3 desde cero y una prueba independiente migró datos históricos desde V1 verificando integridad y ausencia de consentimiento ficticio. La verificación Docker posterior se registra separadamente; estos datos no son una prueba de carga.
+
+La imagen local se construyó el mismo día con `--platform linux/amd64`. Compose dejó MySQL, RabbitMQ y Reservas `healthy`; Flyway confirmó V1, V2 y V3. Liveness/readiness devolvieron `UP`. Actuator general, las rutas de negocio, Swagger/API docs, un bearer inválido y HTTP Basic devolvieron 401 sin challenge Basic. El Compose base fija `SPRINGDOC_ENABLED=false` y `SWAGGER_PUBLIC=false`, independientemente del `.env` local. El contenedor se verificó como UID/GID 10001, root filesystem de solo lectura, `cap_drop=ALL` y `no-new-privileges`.
 
 La verificación local de seguridad debe confirmar además que solo liveness/readiness son públicas, que Swagger devuelve `401` mientras está deshabilitado/protegido y que la imagen corre como UID/GID 10001.
 

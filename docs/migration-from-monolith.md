@@ -9,4 +9,6 @@ No existe lectura cross-schema en runtime. El cutover debe ser un procedimiento 
 5. Detener escrituras del monolito para estas rutas, realizar delta final y cambiar Gateway.
 6. Mantener rollback por routing durante la ventana, sin doble escritura no coordinada.
 
+Flyway V3 es expandible y preserva V1/V2: añade referencias de consentimiento, clave de deduplicación pendiente, versión de agregado, periodo de ocupación y leasing Outbox. Inicializa `ocupacion_desde/hasta` con el periodo contractual. Solo copia evidencia de aceptación a una reserva cuando la solicitud histórica ya estaba marcada como verificada; no fabrica hash, ID ni timestamp. `HistoricalMigrationIT` ejecuta V1, inserta datos representativos y aplica V2/V3 antes de validar filas, fechas, restricciones e índices.
+
 La contradicción histórica RF15 (“antes de entrega”) frente a la regla vigente (“antes de confirmación de recepción”) se resuelve a favor de la regla vigente. Una reserva solo pasa a cancelada cuando Préstamos emite `PrestamoCancelado`; entrega registrada sin recepción no libera inventario automáticamente.

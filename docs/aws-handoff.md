@@ -6,7 +6,7 @@ Imagen estable existente e inmutable: `fabriciofabianquispebarzola/lendup-reserv
 
 ## Configuración
 
-Obligatorias: `SPRING_PROFILES_ACTIVE=prod`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD`, `FIREBASE_PROJECT_ID`, ADC Firebase externo, `CORS_ORIGINS`, `CATALOG_SERVICE_BASE_URL`, `CATALOG_SERVICE_TOKEN`, `CATALOG_SNAPSHOT_URI_TEMPLATE`, `IDENTITY_SERVICE_BASE_URL`, `IDENTITY_SERVICE_TOKEN`, `IDENTITY_FIREBASE_USER_URI_TEMPLATE` e `IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE`. Las plantillas deben proceder de contratos acordados; el servicio no trae endpoints internos ficticios.
+Obligatorias: `SPRING_PROFILES_ACTIVE=prod`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD`, `FIREBASE_PROJECT_ID`, ADC Firebase externo, `CORS_ORIGINS`, `CATALOG_SERVICE_BASE_URL`, `CATALOG_SERVICE_TOKEN`, `CATALOG_SNAPSHOT_URI_TEMPLATE`, `IDENTITY_SERVICE_BASE_URL`, `IDENTITY_SERVICE_TOKEN`, `IDENTITY_FIREBASE_USER_URI_TEMPLATE`, `IDENTITY_ELIGIBILITY_URI_TEMPLATE`, `IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE`, `LOAN_SERVICE_BASE_URL`, `LOAN_SERVICE_TOKEN` y `LOAN_CONTACT_ACCESS_URI_TEMPLATE`. Las plantillas deben proceder de contratos acordados; el servicio no trae endpoints internos ficticios.
 
 Opcionales: `SERVER_PORT=8081`, `DB_POOL_MAX_SIZE=25` (mínimo 21 para la prueba objetivo de 20 aceptaciones simultáneas), timeouts `*_TIMEOUT_MS`, `OUTBOX_RELAY_DELAY_MS=1000` y `OUTBOX_MAX_ATTEMPTS=10`. Mantener `SPRINGDOC_ENABLED=false` y `SWAGGER_PUBLIC=false` en producción. Ningún valor secreto debe ir en la definición de imagen, Git o logs. Usar Secrets Manager/Parameter Store e IAM Task Role/IRSA según la plataforma elegida.
 
@@ -25,7 +25,7 @@ Propagar `Authorization` y `X-Correlation-ID`; preservar timeouts superiores a l
 
 1. Aprovisionar DB/Rabbit/secretos y confirmar contratos internos.
 2. Ejecutar Flyway mediante una única tarea/instancia antes de escalar; revisar backup y usuario DDL temporal si el usuario runtime no tiene DDL.
-3. Desplegar una instancia, comprobar readiness y Flyway V2 (`condiciones_aceptadas_en` nullable y marca no destructiva `consentimiento_verificado`), revisar outbox; luego escalar.
+3. Desplegar una instancia, comprobar readiness y Flyway V3 (consentimiento verificable, deduplicación pendiente, ocupación separada y leases Outbox), revisar outbox; luego escalar.
 4. Verificar consumo/publicación con IDs sintéticos y métricas/DLQ.
 5. Registrar `docker inspect --format='{{index .RepoDigests 0}}' IMAGE:TAG`.
 

@@ -2,4 +2,4 @@
 
 Estado: aceptada.
 
-El contrato v1 no contiene una declaración explícita ni una versión de snapshot. Por ello `creada_en` no puede usarse como prueba de consentimiento. Flyway V2 conserva los datos históricos, vuelve nullable `condiciones_aceptadas_en` y agrega `consentimiento_verificado=false`. Las respuestas ocultan timestamps no verificados. La exigencia completa se activará únicamente después de acordar con Identidad, Catálogo y Frontend los contratos descritos en `docs/integration-contracts.md`; `DESCONOCIDO` nunca equivale a aceptación.
+El cuerpo de creación requiere `aceptacion_condiciones` con ID de snapshot, SHA-256 y confirmación explícita. Reservas coteja la referencia con Catálogo y registra su propio timestamp; `creada_en` nunca es evidencia. Flyway V2 conserva filas históricas y V3 añade las referencias sin atribuir consentimiento ficticio. La creación falla con 503 si Identidad/Catálogo no pueden acreditar los hechos y con 409 si el snapshot cambió. El frontend debe adoptar el campo nuevo antes del cutover.

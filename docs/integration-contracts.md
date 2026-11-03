@@ -1,42 +1,29 @@
 # Contratos de integración
 
-## Confirmados por este repositorio
+Este documento separa lo confirmado por código público inspeccionado de las propuestas necesarias para operar el microservicio. Reservas no trae endpoints ficticios ni respuestas de éxito simuladas; una plantilla ausente, timeout o respuesta incompleta produce `503`.
 
-| Operación | Responsable | Transporte | Datos mínimos | Autenticación | Fallo seguro |
-|---|---|---|---|---|---|
-| Snapshot de publicación | Catálogo | HTTP GET, plantilla `CATALOG_SNAPSHOT_URI_TEMPLATE` | IDs, estado, `periodo_ofrecido`, tarifa, garantía, moneda, lugar y cuatro condiciones | `CATALOG_SERVICE_TOKEN` | 503, no crea solicitud |
-| UID Firebase a UUID | Identidad | HTTP GET, `IDENTITY_FIREBASE_USER_URI_TEMPLATE` | `usuario_id` UUID | `IDENTITY_SERVICE_TOKEN` | 503, no autoriza |
-| Contacto autorizado | Identidad | HTTP GET, `IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE` | `telefono` | `IDENTITY_SERVICE_TOKEN` | 503, no inventa contacto |
-| Cancelación/liberación | Préstamos | RabbitMQ v1 | Contratos en `contracts/events/v1` | Credenciales Rabbit/TLS | retry y DLQ; no libera localmente |
+## Confirmado en los repositorios inspeccionados
 
-Las rutas concretas quedan externas. Base URL, token y plantilla son obligatorios para cada operación; no se deduce ningún endpoint del monolito.
+- Firebase autentica y entrega UID, `email_verified` y custom claims firmadas.
+- El backend de Identidad puede resolver usuarios, pero no expone un contrato interno confirmado que combine UUID, verificación institucional y aceptación de la versión vigente de términos.
+- Catálogo expone publicación, condiciones y disponibilidades, pero su contrato público no incluye `snapshot_id`, hash autoritativo ni `periodo_ofrecido` con la forma requerida por Reservas.
+- El frontend muestra una casilla de condiciones, pero `requests.service.ts` no envía evidencia ligada al snapshot.
+- El monolito crea Préstamos directamente; no confirma los contratos de eventos ni la consulta de vigencia de contacto del servicio independiente.
 
-## Propuestas pendientes de aprobación
+## Propuestas implementadas como puertos configurables
 
-### Elegibilidad institucional y términos generales
+| Operación | Responsable | Configuración | Respuesta mínima | Fallo |
+|---|---|---|---|---|
+| UID Firebase → UUID | Identidad | `IDENTITY_FIREBASE_USER_URI_TEMPLATE` | `usuario_id` UUID | 503/401; no autoriza |
+| Elegibilidad | Identidad | `IDENTITY_ELIGIBILITY_URI_TEMPLATE` | `estado_verificacion: VERIFICADO`, `terminos_generales_vigentes_aceptados: true` | desconocido 503; negativo 403 |
+| Snapshot de publicación | Catálogo | `CATALOG_SNAPSHOT_URI_TEMPLATE` | ID coincidente, `snapshot_id`, SHA-256, propietario, estado, periodo, importes y cuatro condiciones | 503; obsoleto 409 |
+| Vigencia del contacto | Préstamos | `LOAN_CONTACT_ACCESS_URI_TEMPLATE` | `contacto_vigente: true` para reserva/participante | 503/403; no consulta teléfono |
+| Teléfono autorizado | Identidad | `IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE` | `telefono` solo tras autorización anterior | 503; no inventa dato |
 
-- Responsable: Identidad.
-- Operación requerida: consultar por UUID interno si el estudiante está verificado institucionalmente y qué versión de términos generales aceptó.
-- Respuesta mínima propuesta: `usuario_id`, `verificacion_institucional` (`VERIFICADO|NO_VERIFICADO`), `terminos_generales_version`, `terminos_generales_aceptados_en` UTC.
-- Autenticación: token de servicio; nunca headers públicos.
-- Variable futura: solo después de acordar una URI template con Identidad.
-- Fallo: 503 cuando la regla pase a ser obligatoria; `DESCONOCIDO` nunca equivale a verificado.
-- Aceptación: pruebas contractuales de verificado, no verificado, ausente, timeout y respuesta inválida.
+Todas las llamadas usan base URL, bearer token de servicio y timeouts externos. Los tokens se inyectan como secretos; no se aceptan UID, UUID, rol, permiso o teléfono desde headers públicos o cuerpos.
 
-### Consentimiento de condiciones de publicación
+## Criterios de aceptación externos
 
-- Responsables: Catálogo y Frontend.
-- Operación requerida: Catálogo debe emitir un identificador/version/hash inmutable del snapshot. Frontend debe presentar ese snapshot y enviar una aceptación explícita ligada a él.
-- Cuerpo mínimo propuesto, no vigente: `aceptacion_condiciones: { "snapshot_id": "...", "aceptadas": true }`. El servidor registra su propio timestamp; no confía en una fecha del cliente.
-- Fallo: 409 si el snapshot cambió y 503 si no puede verificarse.
-- Aceptación: prueba E2E que demuestra que el hash presentado es el almacenado y que `condiciones_aceptadas_en` solo aparece con evidencia válida.
+Identidad debe probar elegible, no elegible, términos no aceptados, usuario ausente, timeout y respuesta inválida. Catálogo debe demostrar canonicalización/hash estable, ID solicitado coincidente, versión obsoleta, disponibilidad y snapshot inmutable. Préstamos debe demostrar que el acceso al contacto termina al cerrar la operación y que un administrador no participante no se habilita por defecto. Frontend debe enviar exactamente `aceptacion_condiciones: {snapshot_id, snapshot_hash, aceptada:true}` obtenido del snapshot mostrado.
 
-Hasta aprobar estas propuestas, el body vigente no cambia y las solicitudes nuevas guardan `consentimiento_verificado=false`. Esto conserva compatibilidad sin presentar `creada_en` como consentimiento.
-
-## Equipos externos
-
-- Préstamos debe producir `PrestamoCancelado`, `CancelacionRechazada` y `PeriodoPrestamoLiberado`, y consumir `ReservaConfirmada`/`CancelacionReservaSolicitada` de forma idempotente.
-- Notificaciones puede consumir los eventos emitidos; Reservas no escribe su base.
-- Pagos, Garantías y Reputación no tienen una operación de Reservas y no deben acoplarse a sus tablas.
-- Gateway debe preservar las dos rutas, `Authorization` y `X-Correlation-ID`.
-- DevOps debe inyectar secretos, TLS, alertas Outbox/DLQ y ejecutar Flyway de forma controlada.
+Los eventos confirmados por este repositorio están en `contracts/events/v1`. Su adopción por Préstamos y Notificaciones sigue pendiente; publicar a RabbitMQ no demuestra integración extremo a extremo.

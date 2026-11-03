@@ -4,9 +4,9 @@ Microservicio Java 21/Spring Boot 4 para el bounded context de solicitudes, rese
 
 ## Estado y límites
 
-El código es ejecutable, pero una instalación funcional requiere contratos internos que todavía no existen en los repositorios inspeccionados: snapshot autoritativo de Catálogo, contacto autorizado de Identidad y consumidores/productores de Préstamos. Si faltan, las operaciones dependientes responden `503`; no existen stubs de producción.
+El código es ejecutable, pero crear solicitudes y consultar contactos exige contratos internos que todavía no existen en los repositorios inspeccionados: snapshot autoritativo versionado de Catálogo, elegibilidad institucional/términos de Identidad, vigencia del préstamo y contacto autorizado. Si faltan, las operaciones dependientes responden `503`; no existen stubs de producción.
 
-Las rutas internas de Catálogo e Identidad no están codificadas con valores supuestos. Deben configurarse mediante `CATALOG_SNAPSHOT_URI_TEMPLATE`, `IDENTITY_FIREBASE_USER_URI_TEMPLATE` e `IDENTITY_AUTHORIZED_CONTACT_URI_TEMPLATE` una vez que sus equipos publiquen contratos acordados. La verificación institucional y la aceptación versionada de términos todavía no tienen un contrato confirmado; el servicio las modela como `DESCONOCIDO`, nunca como verificadas. Véase [docs/integration-contracts.md](docs/integration-contracts.md).
+Las rutas internas no están codificadas con valores supuestos. Deben configurarse mediante las plantillas `CATALOG_*`, `IDENTITY_*` y `LOAN_*` una vez aprobadas. La verificación institucional y términos se modelan como `DESCONOCIDO`, nunca como verificados; por ello hoy la creación falla de forma segura hasta conectar Identidad y Catálogo. Véase [docs/cross-service-integration.md](docs/cross-service-integration.md).
 
 Se inspeccionaron sin modificar `lendup-backend` y `lendup-frontend-web` en las rutas locales proporcionadas. No se encontró el documento final de arquitectura; por tanto, no se atribuyen a él citas ni cumplimiento no verificado. Véase [docs/architecture.md](docs/architecture.md).
 
@@ -22,7 +22,7 @@ New-Item -ItemType Directory -Force .secrets
 docker compose up --build
 ```
 
-API: `http://localhost:8081/api/v1`; readiness: `http://localhost:8081/actuator/health/readiness`. Swagger está deshabilitado por defecto; para desarrollo local puede habilitarse expresamente con `SPRINGDOC_ENABLED=true` y requiere Firebase salvo que también se configure `SWAGGER_PUBLIC=true`. Con ambas opciones de desarrollo, Swagger muestra `Authorize` mediante `firebaseBearer` y envía `Authorization: Bearer <token>`. `SWAGGER_PUBLIC` no debe habilitarse en producción.
+API: `http://localhost:8081/api/v1`; readiness: `http://localhost:8081/actuator/health/readiness`. Swagger está deshabilitado por defecto. El `compose.yaml` base fija ambas opciones a `false`, incluso si el `.env` local contiene otros valores. Para desarrollo puede habilitarse expresamente al ejecutar el JAR/contenedor con `SPRINGDOC_ENABLED=true`; sigue requiriendo Firebase salvo que también se active `SWAGGER_PUBLIC=true` fuera de `prod`. Con ambas opciones, Swagger muestra `Authorize` mediante `firebaseBearer` y envía `Authorization: Bearer <token>`. Un override Compose local para habilitarlo no debe versionarse; `SWAGGER_PUBLIC` no debe habilitarse en producción.
 
 Para ejecutar solo el artefacto:
 
@@ -32,6 +32,8 @@ java -jar target\lendup-reservations-service-0.2.0-SNAPSHOT.jar
 ```
 
 La zona de los periodos REST es `America/Lima` y se representa sin offset, por compatibilidad con `toApiLocalDateTime`/`fromApiLocalDateTime`. Timestamps de auditoría/eventos se emiten en UTC.
+
+La creación requiere `aceptacion_condiciones` con `snapshot_id`, el SHA-256 `snapshot_hash` y `aceptada: true`. El servidor coteja la referencia con Catálogo y registra su propio instante. El frontend actual debe añadir esta estructura; no se conserva una vía insegura para atribuir consentimiento sin versión/hash.
 
 ## Imagen
 
