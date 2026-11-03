@@ -10,6 +10,7 @@
     "event_type": { "enum": ["PrestamoCancelado", "CancelacionRechazada", "PeriodoPrestamoLiberado"] },
     "event_version": { "const": 1 }, "aggregate_version": { "type": "integer", "minimum": 1 },
     "aggregate_id": { "type": "string", "format": "uuid" }, "occurred_at": { "type": "string", "format": "date-time" }, "correlation_id": { "type": "string" },
-    "payload": { "type": "object", "required": ["reserva_id"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "nuevo_hasta": { "type": "string", "format": "local-date-time" }, "motivo": { "type": "string" } } }
-  }
+    "payload": { "type": "object", "required": ["reserva_id"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "nuevo_hasta": { "type": "string", "format": "local-date-time" }, "motivo": { "type": "string" }, "decision": { "type": "string" }, "devolucion_confirmada_por_prestamista": { "type": "boolean" }, "incidencias_pendientes": { "type": "boolean" } } }
+  },
+  "allOf": [{ "if": { "properties": { "event_type": { "const": "PeriodoPrestamoLiberado" } } }, "then": { "properties": { "payload": { "required": ["reserva_id", "nuevo_hasta", "decision", "devolucion_confirmada_por_prestamista", "incidencias_pendientes"], "properties": { "decision": { "const": "LIBERACION_CONFIRMADA" }, "devolucion_confirmada_por_prestamista": { "const": true }, "incidencias_pendientes": { "const": false } } } } } }]
 }

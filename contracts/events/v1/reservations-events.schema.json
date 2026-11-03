@@ -7,7 +7,7 @@
   "required": ["event_id", "event_type", "event_version", "aggregate_version", "aggregate_id", "occurred_at", "correlation_id", "payload"],
   "properties": {
     "event_id": { "type": "string", "format": "uuid" },
-    "event_type": { "enum": ["SolicitudCreada", "ReservaConfirmada", "CancelacionReservaSolicitada", "ReservaCancelada"] },
+    "event_type": { "enum": ["SolicitudCreada", "SolicitudRechazada", "SolicitudCancelada", "ReservaConfirmada", "CancelacionReservaSolicitada", "ReservaCancelada"] },
     "event_version": { "const": 1 },
     "aggregate_version": { "type": "integer", "minimum": 1 },
     "aggregate_id": { "type": "string", "format": "uuid" },
@@ -16,21 +16,48 @@
     "payload": { "type": "object" }
   },
   "allOf": [
+    { "if": { "properties": { "event_type": { "const": "SolicitudCreada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudCreada" } } } },
+    { "if": { "properties": { "event_type": { "const": "SolicitudRechazada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudRechazada" } } } },
+    { "if": { "properties": { "event_type": { "const": "SolicitudCancelada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudCancelada" } } } },
     { "if": { "properties": { "event_type": { "const": "ReservaConfirmada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/reservaConfirmada" } } } },
-    { "if": { "properties": { "event_type": { "const": "CancelacionReservaSolicitada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/cancelacionSolicitada" } } } }
+    { "if": { "properties": { "event_type": { "const": "CancelacionReservaSolicitada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/cancelacionSolicitada" } } } },
+    { "if": { "properties": { "event_type": { "const": "ReservaCancelada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/reservaCancelada" } } } }
   ],
   "$defs": {
+    "solicitudCreada": {
+      "type": "object", "additionalProperties": false,
+      "required": ["solicitud_id", "publicacion_id", "prestatario_usuario_id", "prestamista_usuario_id", "desde", "hasta", "condiciones_snapshot_id", "condiciones_snapshot_hash"],
+      "properties": {
+        "solicitud_id": { "type": "string", "format": "uuid" }, "publicacion_id": { "type": "string", "format": "uuid" },
+        "prestatario_usuario_id": { "type": "string", "format": "uuid" }, "prestamista_usuario_id": { "type": "string", "format": "uuid" },
+        "desde": { "type": "string", "format": "local-date-time" }, "hasta": { "type": "string", "format": "local-date-time" },
+        "condiciones_snapshot_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "condiciones_snapshot_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "solicitudRechazada": {
+      "type": "object", "additionalProperties": false,
+      "required": ["solicitud_id", "motivo_rechazo"],
+      "properties": { "solicitud_id": { "type": "string", "format": "uuid" }, "motivo_rechazo": { "type": "string", "minLength": 1, "maxLength": 1000 } }
+    },
+    "solicitudCancelada": {
+      "type": "object", "additionalProperties": false,
+      "required": ["solicitud_id", "motivo_cancelacion", "cancelada_por_usuario_id"],
+      "properties": { "solicitud_id": { "type": "string", "format": "uuid" }, "motivo_cancelacion": { "type": "string", "minLength": 1, "maxLength": 1000 }, "cancelada_por_usuario_id": { "type": "string", "format": "uuid" } }
+    },
     "reservaConfirmada": {
-      "type": "object",
-      "required": ["reserva_id", "solicitud_id", "publicacion_id", "prestamista_usuario_id", "prestatario_usuario_id", "desde", "hasta", "tarifa_diaria_acordada", "moneda_acordada", "lugar_intercambio_acordado", "condiciones_uso_acordadas", "condiciones_entrega_acordadas", "condiciones_devolucion_acordadas", "condiciones_cancelacion_acordadas"],
+      "type": "object", "additionalProperties": false,
+      "required": ["reserva_id", "solicitud_id", "publicacion_id", "prestamista_usuario_id", "prestatario_usuario_id", "desde", "hasta", "tarifa_diaria_acordada", "moneda_acordada", "lugar_intercambio_acordado", "condiciones_uso_acordadas", "condiciones_entrega_acordadas", "condiciones_devolucion_acordadas", "condiciones_cancelacion_acordadas", "condiciones_snapshot_id", "condiciones_snapshot_hash", "condiciones_aceptadas_en"],
       "properties": {
         "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "publicacion_id": { "type": "string", "format": "uuid" },
         "prestamista_usuario_id": { "type": "string", "format": "uuid" }, "prestatario_usuario_id": { "type": "string", "format": "uuid" },
         "desde": { "type": "string", "format": "local-date-time" }, "hasta": { "type": "string", "format": "local-date-time" },
         "tarifa_diaria_acordada": { "type": "number", "exclusiveMinimum": 0 }, "garantia_monetaria_acordada": { "type": ["number", "null"], "minimum": 0 }, "moneda_acordada": { "type": "string", "pattern": "^[A-Z]{3}$" },
-        "lugar_intercambio_acordado": { "type": "string" }, "condiciones_uso_acordadas": { "type": "string" }, "condiciones_entrega_acordadas": { "type": "string" }, "condiciones_devolucion_acordadas": { "type": "string" }, "condiciones_cancelacion_acordadas": { "type": "string" }
+        "lugar_intercambio_acordado": { "type": "string" }, "condiciones_uso_acordadas": { "type": "string" }, "condiciones_entrega_acordadas": { "type": "string" }, "condiciones_devolucion_acordadas": { "type": "string" }, "condiciones_cancelacion_acordadas": { "type": "string" },
+        "condiciones_snapshot_id": { "type": "string" }, "condiciones_snapshot_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "condiciones_aceptadas_en": { "type": "string", "format": "date-time" }
       }
     },
-    "cancelacionSolicitada": { "type": "object", "required": ["reserva_id", "solicitud_id", "solicitada_por_usuario_id", "motivo_cancelacion"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "solicitada_por_usuario_id": { "type": "string", "format": "uuid" }, "motivo_cancelacion": { "type": "string" } } }
+    "cancelacionSolicitada": { "type": "object", "additionalProperties": false, "required": ["reserva_id", "solicitud_id", "solicitada_por_usuario_id", "motivo_cancelacion"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "solicitada_por_usuario_id": { "type": "string", "format": "uuid" }, "motivo_cancelacion": { "type": "string", "minLength": 1, "maxLength": 1000 } } },
+    "reservaCancelada": { "type": "object", "additionalProperties": false, "required": ["reserva_id", "solicitud_id"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" } } }
   }
 }

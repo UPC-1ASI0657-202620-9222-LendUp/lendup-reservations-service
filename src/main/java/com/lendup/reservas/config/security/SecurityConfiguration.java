@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,6 +21,7 @@ public class SecurityConfiguration {
   SecurityFilterChain security(
       HttpSecurity http,
       TokenVerifier verifier,
+      Environment environment,
       @Value("${lendup.security.cors-origins:}") String origins,
       @Value("${lendup.security.swagger-public:false}") boolean swaggerPublic) throws Exception {
     return http
@@ -39,13 +41,17 @@ public class SecurityConfiguration {
           authorize.requestMatchers(
               "/actuator/health/liveness",
               "/actuator/health/readiness").permitAll();
-          if (swaggerPublic) authorize.requestMatchers(SWAGGER_PATHS).permitAll();
+          if (isSwaggerPublic(swaggerPublic, environment)) authorize.requestMatchers(SWAGGER_PATHS).permitAll();
           else authorize.requestMatchers(SWAGGER_PATHS).authenticated();
           authorize.requestMatchers("/actuator/**").denyAll();
           authorize.anyRequest().authenticated();
         })
         .addFilterBefore(new FirebaseAuthenticationFilter(verifier), UsernamePasswordAuthenticationFilter.class)
         .build();
+  }
+
+  static boolean isSwaggerPublic(boolean requested, Environment environment) {
+    return requested && !Arrays.asList(environment.getActiveProfiles()).contains("prod");
   }
 
   private CorsConfiguration corsConfiguration(String configuredOrigins) {

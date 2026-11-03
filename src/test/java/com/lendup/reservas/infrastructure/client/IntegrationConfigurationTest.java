@@ -10,7 +10,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class IntegrationConfigurationTest {
-  private final IntegrationProperties properties = new IntegrationProperties(null, null);
+  private final IntegrationProperties properties = new IntegrationProperties(null, null, null);
 
   @Test
   void catalogoFallaSeguroSinContratoConfigurado() {
@@ -29,5 +29,10 @@ class IntegrationConfigurationTest {
         () -> adapter.resolverUsuarioId("firebase-uid"));
     assertThrows(DependencyUnavailableException.class,
         () -> adapter.obtenerTelefonoAutorizado(UUID.randomUUID(), UUID.randomUUID()));
+    assertThrows(DependencyUnavailableException.class,
+        () -> adapter.obtain(UUID.randomUUID()));
+    assertThrows(DependencyUnavailableException.class,
+        () -> new PrestamoAccessRestAdapter(properties)
+            .contactoVigente(UUID.randomUUID(), UUID.randomUUID()));
   }
 }

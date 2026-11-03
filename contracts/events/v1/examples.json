@@ -2,7 +2,17 @@
   "reserva_confirmada": {
     "event_id": "11111111-1111-4111-8111-111111111111", "event_type": "ReservaConfirmada", "event_version": 1, "aggregate_version": 1,
     "aggregate_id": "22222222-2222-4222-8222-222222222222", "occurred_at": "2026-11-01T15:00:00Z", "correlation_id": "req-123",
-    "payload": { "reserva_id": "22222222-2222-4222-8222-222222222222", "solicitud_id": "33333333-3333-4333-8333-333333333333", "publicacion_id": "44444444-4444-4444-8444-444444444444", "prestamista_usuario_id": "55555555-5555-4555-8555-555555555555", "prestatario_usuario_id": "66666666-6666-4666-8666-666666666666", "desde": "2026-11-10T09:00:00", "hasta": "2026-11-12T09:00:00", "tarifa_diaria_acordada": 20.00, "garantia_monetaria_acordada": null, "moneda_acordada": "PEN", "lugar_intercambio_acordado": "Campus", "condiciones_uso_acordadas": "Uso académico", "condiciones_entrega_acordadas": "Entrega personal", "condiciones_devolucion_acordadas": "Mismo estado", "condiciones_cancelacion_acordadas": "Según política aceptada" }
+    "payload": { "reserva_id": "22222222-2222-4222-8222-222222222222", "solicitud_id": "33333333-3333-4333-8333-333333333333", "publicacion_id": "44444444-4444-4444-8444-444444444444", "prestamista_usuario_id": "55555555-5555-4555-8555-555555555555", "prestatario_usuario_id": "66666666-6666-4666-8666-666666666666", "desde": "2026-11-10T09:00:00", "hasta": "2026-11-12T09:00:00", "tarifa_diaria_acordada": 20.00, "garantia_monetaria_acordada": null, "moneda_acordada": "PEN", "lugar_intercambio_acordado": "Campus", "condiciones_uso_acordadas": "Uso académico", "condiciones_entrega_acordadas": "Entrega personal", "condiciones_devolucion_acordadas": "Mismo estado", "condiciones_cancelacion_acordadas": "Según política aceptada", "condiciones_snapshot_id": "pub-444-v7", "condiciones_snapshot_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "condiciones_aceptadas_en": "2026-11-01T14:59:58Z" }
+  },
+  "solicitud_rechazada": {
+    "event_id": "99999999-9999-4999-8999-999999999999", "event_type": "SolicitudRechazada", "event_version": 1, "aggregate_version": 2,
+    "aggregate_id": "33333333-3333-4333-8333-333333333333", "occurred_at": "2026-11-01T16:00:00Z", "correlation_id": "req-789",
+    "payload": { "solicitud_id": "33333333-3333-4333-8333-333333333333", "motivo_rechazo": "El objeto no estará disponible" }
+  },
+  "periodo_prestamo_liberado": {
+    "event_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "event_type": "PeriodoPrestamoLiberado", "event_version": 1, "aggregate_version": 4,
+    "aggregate_id": "88888888-8888-4888-8888-888888888888", "occurred_at": "2026-11-15T15:00:00Z", "correlation_id": "req-release",
+    "payload": { "reserva_id": "22222222-2222-4222-8222-222222222222", "nuevo_hasta": "2026-11-11T09:00:00", "decision": "LIBERACION_CONFIRMADA", "devolucion_confirmada_por_prestamista": true, "incidencias_pendientes": false }
   },
   "prestamo_cancelado": {
     "event_id": "77777777-7777-4777-8777-777777777777", "event_type": "PrestamoCancelado", "event_version": 1, "aggregate_version": 3,
