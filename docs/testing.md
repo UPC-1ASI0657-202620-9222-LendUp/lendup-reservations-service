@@ -3,7 +3,7 @@
 `mvnw.cmd clean verify` ejecuta:
 
 - dominio: especificaciones componibles, agenda, fábrica, periodos inválidos/consecutivos/solapados, fracciones de segundo, extremos, tarifa, garantía, snapshots, estados y permisos;
-- seguridad: token ausente, inválido, correo no verificado, rechazo de rol por header, ausencia de usuarios en memoria y rechazo de HTTP Basic/Form Login;
+- seguridad: token ausente, inválido, correo no verificado, audiencia distinta —incluido `lendup-3cb42`—, rechazo de rol por header, ausencia de usuarios en memoria y rechazo de HTTP Basic/Form Login;
 - contrato: cuerpo de creación, JSON estricto, motivos obligatorios, nueve operaciones, Firebase Bearer y campos esperados por el mapper frontend;
 - integración `*IT`: Flyway/MySQL real, dos y veinte aceptaciones concurrentes, creación concurrente de agenda, rollback conjunto reserva/outbox, periodo bloqueado durante la saga, duplicados y eventos fuera de orden;
 - RabbitMQ real: publicación con confirm, retorno sin ruta, dos relays concurrentes y marcado posterior; la caída de broker se cubre aislando el relay y verificando que el evento permanece pendiente.

@@ -12,7 +12,9 @@ Se inspeccionaron sin modificar `lendup-backend` y `lendup-frontend-web` en las 
 
 ## Inicio local
 
-Requisitos: JDK 21, Docker con Compose v2 y credencial Firebase de desarrollo válida.
+Requisitos: JDK 21, Docker con Compose v2 y credencial Firebase de desarrollo válida. El archivo
+`.secrets/firebase-service-account.json` debe pertenecer a `lendup-desarrollo`; el servicio rechaza
+la configuración y los tokens del proyecto anterior `lendup-3cb42`.
 
 ```powershell
 Copy-Item .env.example .env

@@ -14,10 +14,16 @@ import org.springframework.context.annotation.Profile;
 @Configuration
 @Profile("!test")
 public class FirebaseConfiguration {
+  private static final String SHARED_FIREBASE_PROJECT_ID = "lendup-desarrollo";
+
   @Bean
   FirebaseAuth firebaseAuth(@Value("${firebase.project-id}") String projectId) throws IOException {
     if (projectId == null || projectId.isBlank()) {
       throw new IllegalStateException("FIREBASE_PROJECT_ID es obligatorio");
+    }
+    if (!SHARED_FIREBASE_PROJECT_ID.equals(projectId)) {
+      throw new IllegalStateException(
+          "FIREBASE_PROJECT_ID debe identificar el proyecto Firebase compartido de LendUp");
     }
     FirebaseApp app;
     if (FirebaseApp.getApps().isEmpty()) {
@@ -42,9 +48,13 @@ public class FirebaseConfiguration {
   }
 
   @Bean
-  TokenVerifier firebaseTokenVerifier(FirebaseAuth auth) {
+  TokenVerifier firebaseTokenVerifier(
+      FirebaseAuth auth, @Value("${firebase.project-id}") String projectId) {
     return rawToken -> {
       FirebaseToken token = auth.verifyIdToken(rawToken, true);
+      if (!projectId.equals(token.getClaims().get("aud"))) {
+        throw new SecurityException("Token emitido para otro proyecto Firebase");
+      }
       Object role = token.getClaims().get("role");
       boolean administrator = "ADMINISTRADOR".equals(role)
           || Boolean.TRUE.equals(token.getClaims().get("admin"));
