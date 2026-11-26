@@ -98,6 +98,9 @@ public class OutboxRelay {
       case "ReservaCancelada" -> "reservas.cancelada.v1";
       case "SolicitudRechazada" -> "reservas.solicitud-rechazada.v1";
       case "SolicitudCancelada" -> "reservas.solicitud-cancelada.v1";
+      case "ExtensionRetenida" -> "reservas.extension-retenida.v1";
+      case "ExtensionRetencionRechazada" -> "reservas.extension-retencion-rechazada.v1";
+      case "ExtensionOcupacionConfirmada" -> "reservas.extension-ocupacion-confirmada.v1";
       default -> throw new IllegalArgumentException("Tipo de evento Outbox no soportado");
     };
   }

@@ -25,23 +25,26 @@ public class LoanEventConsumer {
       "PrestamoCancelado",
       "CancelacionRechazada",
       "PeriodoPrestamoLiberado",
-      "FechaDevolucionActualizada");
+      "FechaDevolucionActualizada",
+      "ExtensionRetencionSolicitada", "ExtensionConfirmacionSolicitada", "ExtensionRetencionCancelada");
   private final JsonMapper json;
   private final ReservationPersistencePort persistence;
   private final ProcessedEventJpaRepository processed;
   private final OutboxPort outbox;
   private final AuditPort audit;
   private final Clock clock;
+  private final ExtensionHoldWorkflow extensionHolds;
 
   public LoanEventConsumer(JsonMapper json, ReservationPersistencePort persistence,
       ProcessedEventJpaRepository processed,
-      OutboxPort outbox, AuditPort audit, Clock clock) {
+      OutboxPort outbox, AuditPort audit, Clock clock, ExtensionHoldWorkflow extensionHolds) {
     this.json = json;
     this.persistence = persistence;
     this.processed = processed;
     this.outbox = outbox;
     this.audit = audit;
     this.clock = clock;
+    this.extensionHolds = extensionHolds;
   }
 
   @RabbitListener(queues = RabbitConfiguration.LOAN_QUEUE)
@@ -65,6 +68,15 @@ public class LoanEventConsumer {
     Map<String, Object> payload = new LinkedHashMap<>();
     rawMap.forEach((key, value) -> payload.put(String.valueOf(key), value));
     UUID reservationId = uuid(payload, "reserva_id");
+    if (type.startsWith("Extension")) {
+      if (processed.tryRegister(eventId.toString(), CONSUMER, reservationId.toString(), aggregateVersion, clock.instant()) == 0) return;
+      extensionHolds.handle(type, new ExtensionHoldWorkflow.Request(uuid(payload, "cambio_fecha_prestamo_id"),
+          uuid(payload, "publicacion_id"), reservationId, uuid(payload, "prestamo_id"),
+          LocalDateTime.parse(requiredText(payload, "fecha_anterior_en")),
+          LocalDateTime.parse(requiredText(payload, "fecha_propuesta_en"))),
+          aggregateVersion, String.valueOf(event.getOrDefault("correlation_id", "")));
+      return;
+    }
     LocalDateTime releasedUntil = null;
     LocalDateTime updatedUntil = null;
 

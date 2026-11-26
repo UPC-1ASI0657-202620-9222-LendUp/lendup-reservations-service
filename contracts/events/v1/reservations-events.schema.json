@@ -7,7 +7,7 @@
   "required": ["event_id", "event_type", "event_version", "aggregate_version", "aggregate_id", "occurred_at", "correlation_id", "payload"],
   "properties": {
     "event_id": { "type": "string", "format": "uuid" },
-    "event_type": { "enum": ["SolicitudCreada", "SolicitudRechazada", "SolicitudCancelada", "ReservaConfirmada", "CancelacionReservaSolicitada", "ReservaCancelada"] },
+    "event_type": { "enum": ["SolicitudCreada", "SolicitudRechazada", "SolicitudCancelada", "ReservaConfirmada", "CancelacionReservaSolicitada", "ReservaCancelada", "ExtensionRetenida", "ExtensionRetencionRechazada", "ExtensionOcupacionConfirmada"] },
     "event_version": { "const": 1 },
     "aggregate_version": { "type": "integer", "minimum": 1 },
     "aggregate_id": { "type": "string", "format": "uuid" },
@@ -16,6 +16,7 @@
     "payload": { "type": "object" }
   },
   "allOf": [
+    { "if": { "properties": { "event_type": { "enum": ["ExtensionRetenida", "ExtensionRetencionRechazada", "ExtensionOcupacionConfirmada"] } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/extensionHold" } } } },
     { "if": { "properties": { "event_type": { "const": "SolicitudCreada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudCreada" } } } },
     { "if": { "properties": { "event_type": { "const": "SolicitudRechazada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudRechazada" } } } },
     { "if": { "properties": { "event_type": { "const": "SolicitudCancelada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/solicitudCancelada" } } } },
@@ -24,6 +25,18 @@
     { "if": { "properties": { "event_type": { "const": "ReservaCancelada" } } }, "then": { "properties": { "payload": { "$ref": "#/$defs/reservaCancelada" } } } }
   ],
   "$defs": {
+    "extensionHold": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reserva_id", "prestamo_id", "publicacion_id", "cambio_fecha_prestamo_id", "expira_en", "motivo"],
+      "properties": {
+        "reserva_id": { "type": "string", "format": "uuid" },
+        "prestamo_id": { "type": "string", "format": "uuid" },
+        "publicacion_id": { "type": "string", "format": "uuid" },
+        "cambio_fecha_prestamo_id": { "type": "string", "format": "uuid" },
+        "expira_en": { "type": "string", "format": "date-time" },
+        "motivo": { "enum": ["RESERVADA", "CONFIRMADA", "SIN_DISPONIBILIDAD", "EXPIRADA", "CANCELADA", "OCUPACION_INCOMPATIBLE"] }
+      }
+    },
     "solicitudCreada": {
       "type": "object", "additionalProperties": false,
       "required": ["solicitud_id", "publicacion_id", "prestatario_usuario_id", "prestamista_usuario_id", "desde", "hasta", "condiciones_snapshot_id", "condiciones_snapshot_hash"],

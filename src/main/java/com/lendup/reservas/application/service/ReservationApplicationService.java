@@ -108,7 +108,7 @@ public class ReservationApplicationService implements ReservationUseCases {
   }
 
   @Override
-  @Transactional
+  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public ReservaView aceptarSolicitud(UUID actor, UUID id) {
     Solicitud solicitud = persistence.lockSolicitud(id)
         .orElseThrow(() -> new NotFoundException("Solicitud no encontrada"));
