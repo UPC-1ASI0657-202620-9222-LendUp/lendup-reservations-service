@@ -1,11 +1,14 @@
 package com.lendup.reservas.config.security;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,6 +21,25 @@ public class SecurityConfiguration {
   private static final String[] SWAGGER_PATHS = {"/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**"};
 
   @Bean
+  @Order(1)
+  SecurityFilterChain internalSecurity(HttpSecurity http,
+      @Value("${RESERVATIONS_EVIDENCE_SERVICE_TOKEN:}") String token) throws Exception {
+    return http.securityMatcher("/internal/**")
+        .httpBasic(AbstractHttpConfigurer::disable).formLogin(AbstractHttpConfigurer::disable)
+        .logout(AbstractHttpConfigurer::disable).csrf(AbstractHttpConfigurer::disable)
+        .requestCache(AbstractHttpConfigurer::disable)
+        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .exceptionHandling(errors -> errors.accessDeniedHandler((request, response, exception) ->
+            writeError(response, 403, "NO_AUTORIZADO", "No autorizado")))
+        .authorizeHttpRequests(authorize -> authorize
+            .requestMatchers(HttpMethod.GET, "/internal/v1/reservas/*/acuerdo").hasAuthority(EvidenceServiceTokenFilter.READ_AGREEMENT)
+            .anyRequest().denyAll())
+        .addFilterBefore(new EvidenceServiceTokenFilter(token), UsernamePasswordAuthenticationFilter.class)
+        .build();
+  }
+
+  @Bean
+  @Order(2)
   SecurityFilterChain security(
       HttpSecurity http,
       TokenVerifier verifier,
@@ -69,10 +91,11 @@ public class SecurityConfiguration {
     return configuration;
   }
 
-  private void writeError(jakarta.servlet.http.HttpServletResponse response, int status, String code, String message)
+  static void writeError(jakarta.servlet.http.HttpServletResponse response, int status, String code, String message)
       throws java.io.IOException {
     response.setStatus(status);
     response.setContentType("application/json");
+    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     response.getWriter().write("{\"status\":" + status + ",\"error\":\"" + code
         + "\",\"message\":\"" + message + "\"}");
   }

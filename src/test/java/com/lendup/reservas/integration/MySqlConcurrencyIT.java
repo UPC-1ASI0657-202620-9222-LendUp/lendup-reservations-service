@@ -28,15 +28,17 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
-@Import({TestAuthConfiguration.class, MySqlConcurrencyIT.StubConfiguration.class})
+@Import({ TestAuthConfiguration.class, MySqlConcurrencyIT.StubConfiguration.class })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "spring.rabbitmq.listener.simple.auto-startup=false",
     "lendup.outbox.relay-delay-ms=3600000",
+    "LENDUP_CANCELLATIONS_RECOVERY=true",
     "spring.datasource.hikari.maximum-pool-size=25",
     "springdoc.api-docs.enabled=true",
-    "springdoc.swagger-ui.enabled=true"})
+    "springdoc.swagger-ui.enabled=true" })
 class MySqlConcurrencyIT {
-  @Container static final MySQLContainer mysql = new MySQLContainer("mysql:8.4")
+  @Container
+  static final MySQLContainer mysql = new MySQLContainer("mysql:8.4")
       .withDatabaseName("lendup_reservas").withUsername("test").withPassword("test");
 
   @DynamicPropertySource
@@ -46,19 +48,32 @@ class MySqlConcurrencyIT {
     registry.add("spring.datasource.password", mysql::getPassword);
   }
 
-  @Autowired ReservationApplicationService service;
-  @Autowired SolicitudJpaRepository solicitudes;
-  @Autowired ReservaJpaRepository reservas;
-  @Autowired AgendaJpaRepository agendas;
-  @Autowired OutboxJpaRepository outbox;
-  @Autowired AuditJpaRepository audits;
-  @Autowired ProcessedEventJpaRepository processed;
-  @Autowired LoanEventConsumer consumer;
-  @Autowired JsonMapper json;
-  @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
-  @Autowired org.springframework.web.context.WebApplicationContext webContext;
-  @Autowired TestCatalogo catalogo;
-  @Autowired TestPrestamoAccess prestamoAccess;
+  @Autowired
+  ReservationApplicationService service;
+  @Autowired
+  SolicitudJpaRepository solicitudes;
+  @Autowired
+  ReservaJpaRepository reservas;
+  @Autowired
+  AgendaJpaRepository agendas;
+  @Autowired
+  OutboxJpaRepository outbox;
+  @Autowired
+  AuditJpaRepository audits;
+  @Autowired
+  ProcessedEventJpaRepository processed;
+  @Autowired
+  LoanEventConsumer consumer;
+  @Autowired
+  JsonMapper json;
+  @Autowired
+  org.springframework.transaction.PlatformTransactionManager transactionManager;
+  @Autowired
+  org.springframework.web.context.WebApplicationContext webContext;
+  @Autowired
+  TestCatalogo catalogo;
+  @Autowired
+  TestPrestamoAccess prestamoAccess;
 
   UUID lender;
   UUID publication;
@@ -78,15 +93,19 @@ class MySqlConcurrencyIT {
     prestamoAccess.allowed = true;
   }
 
-  @Test void veinteAceptacionesSuperpuestasConfirmanExactamenteUna() throws Exception {
+  @Test
+  void veinteAceptacionesSuperpuestasConfirmanExactamenteUna() throws Exception {
     List<UUID> ids = new ArrayList<>();
-    for (int i = 0; i < 20; i++) ids.add(pending(UUID.randomUUID(), FROM, UNTIL));
+    for (int i = 0; i < 20; i++)
+      ids.add(pending(UUID.randomUUID(), FROM, UNTIL));
     ExecutorService pool = Executors.newFixedThreadPool(20);
     try {
       List<Future<Boolean>> futures = ids.stream()
           .map(id -> pool.submit(() -> attempt(id))).toList();
       int accepted = 0;
-      for (Future<Boolean> future : futures) if (future.get(30, TimeUnit.SECONDS)) accepted++;
+      for (Future<Boolean> future : futures)
+        if (future.get(30, TimeUnit.SECONDS))
+          accepted++;
       assertEquals(1, accepted);
       assertEquals(1, reservas.count());
       assertEquals(1, agendas.count());
@@ -95,7 +114,8 @@ class MySqlConcurrencyIT {
     }
   }
 
-  @Test void dosSolicitudesPendientesIdenticasConcurrentesCreanSoloUna() throws Exception {
+  @Test
+  void dosSolicitudesPendientesIdenticasConcurrentesCreanSoloUna() throws Exception {
     UUID borrower = UUID.randomUUID();
     CrearSolicitudCommand command = command(borrower, FROM, UNTIL);
     ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -110,7 +130,8 @@ class MySqlConcurrencyIT {
     }
   }
 
-  @Test void periodosConsecutivosPuedenConfirmarse() {
+  @Test
+  void periodosConsecutivosPuedenConfirmarse() {
     UUID first = pending(UUID.randomUUID(), FROM, UNTIL);
     UUID second = pending(UUID.randomUUID(), UNTIL, UNTIL.plusDays(1));
     service.aceptarSolicitud(lender, first);
@@ -118,7 +139,8 @@ class MySqlConcurrencyIT {
     assertEquals(2, reservas.count());
   }
 
-  @Test void mismaSolicitudAceptadaDosVecesCreaUnaReserva() throws Exception {
+  @Test
+  void mismaSolicitudAceptadaDosVecesCreaUnaReserva() throws Exception {
     UUID id = pending(UUID.randomUUID(), FROM, UNTIL);
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
@@ -131,7 +153,8 @@ class MySqlConcurrencyIT {
     }
   }
 
-  @Test void cancelacionPendienteMantieneElPeriodoBloqueado() {
+  @Test
+  void cancelacionPendienteMantieneElPeriodoBloqueado() {
     UUID first = pending(UUID.randomUUID(), FROM, UNTIL);
     UUID reservation = service.aceptarSolicitud(lender, first).id();
     service.solicitarCancelacionReserva(lender, false, reservation, "Cambio", "corr");
@@ -140,7 +163,24 @@ class MySqlConcurrencyIT {
         () -> service.aceptarSolicitud(lender, second));
   }
 
-  @Test void reservaYOutboxSeReviertenJuntasSiFallaLaTransaccion() {
+  @Test
+  void custodiaPendienteBloqueaMasAllaDelContratoHastaLaRecuperacion() throws Exception {
+    UUID request = pending(UUID.randomUUID(), FROM, UNTIL);
+    UUID reservation = service.aceptarSolicitud(lender, request).id();
+    service.solicitarCancelacionReserva(lender, false, reservation, "Recuperar objeto", "corr");
+    LocalDateTime from = UNTIL.plusHours(1);
+    LocalDateTime to = from.plusHours(2);
+    UUID rival = pending(UUID.randomUUID(), from, to);
+    assertThrows(BusinessConflictException.class, () -> service.aceptarSolicitud(lender, rival));
+    assertThrows(BusinessConflictException.class,
+        () -> service.crearSolicitud(command(UUID.randomUUID(), from, to)));
+    assertEquals(UNTIL, reservas.findById(reservation).orElseThrow().toDomain().ocupacionHasta());
+    consumer.consume(loanEvent(UUID.randomUUID(), "PrestamoCancelado", 5, reservation, Map.of()));
+    assertEquals(EstadoReserva.CONFIRMADA.name(), service.aceptarSolicitud(lender, rival).estado());
+  }
+
+  @Test
+  void reservaYOutboxSeReviertenJuntasSiFallaLaTransaccion() {
     UUID id = pending(UUID.randomUUID(), FROM, UNTIL);
     var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
     assertThrows(RuntimeException.class, () -> transaction.executeWithoutResult(ignored -> {
@@ -153,7 +193,8 @@ class MySqlConcurrencyIT {
         solicitudes.findById(id).orElseThrow().getEstado());
   }
 
-  @Test void snapshotHistoricoNoCambiaCuandoCatalogoSeActualiza() {
+  @Test
+  void snapshotHistoricoNoCambiaCuandoCatalogoSeActualiza() {
     UUID borrower = UUID.randomUUID();
     var created = service.crearSolicitud(command(borrower, FROM, UNTIL));
     catalogo.conditions.set(terms("99.00", "uso modificado"));
@@ -164,7 +205,8 @@ class MySqlConcurrencyIT {
         () -> assertEquals(SNAPSHOT_HASH, reservation.condicionesSnapshotHash()));
   }
 
-  @Test void liberacionAutoritativaConservaHastaContractual() throws Exception {
+  @Test
+  void liberacionAutoritativaConservaHastaContractual() throws Exception {
     UUID request = pending(UUID.randomUUID(), FROM, UNTIL);
     UUID reservationId = service.aceptarSolicitud(lender, request).id();
     consumer.consume(loanEvent(UUID.randomUUID(), "PeriodoPrestamoLiberado", 1,
@@ -177,7 +219,8 @@ class MySqlConcurrencyIT {
     assertEquals(UNTIL.minusHours(2), stored.ocupacionHasta());
   }
 
-  @Test void liberacionSinEvidenciaSeRechazaYNoSeRegistra() {
+  @Test
+  void liberacionSinEvidenciaSeRechazaYNoSeRegistra() {
     UUID request = pending(UUID.randomUUID(), FROM, UNTIL);
     UUID reservationId = service.aceptarSolicitud(lender, request).id();
     assertThrows(IllegalArgumentException.class, () -> consumer.consume(
@@ -187,7 +230,8 @@ class MySqlConcurrencyIT {
     assertEquals(UNTIL, reservas.findById(reservationId).orElseThrow().toDomain().ocupacionHasta());
   }
 
-  @Test void consumidorDeduplicaYOrdenaEventos() throws Exception {
+  @Test
+  void consumidorDeduplicaYOrdenaEventos() throws Exception {
     UUID request = pending(UUID.randomUUID(), FROM, UNTIL);
     UUID reservationId = service.aceptarSolicitud(lender, request).id();
     service.solicitarCancelacionReserva(lender, false, reservationId, "Cambio", "corr");
@@ -202,7 +246,8 @@ class MySqlConcurrencyIT {
     assertEquals(2, processed.count());
   }
 
-  @Test void contactoSoloParticipanteYConVigenciaConfirmada() {
+  @Test
+  void contactoSoloParticipanteYConVigenciaConfirmada() {
     UUID borrower = UUID.randomUUID();
     UUID request = pending(borrower, FROM, UNTIL);
     UUID reservationId = service.aceptarSolicitud(lender, request).id();
@@ -214,7 +259,8 @@ class MySqlConcurrencyIT {
         () -> service.obtenerContacto(borrower, false, reservationId));
   }
 
-  @Test void solicitudesRechazadasYCanceladasPublicanEventosVersionados() {
+  @Test
+  void solicitudesRechazadasYCanceladasPublicanEventosVersionados() {
     UUID rejected = pending(UUID.randomUUID(), FROM, UNTIL);
     service.rechazarSolicitud(lender, rejected, "No disponible");
     UUID borrower = UUID.randomUUID();
@@ -224,7 +270,8 @@ class MySqlConcurrencyIT {
     assertTrue(outbox.findAll().stream().anyMatch(e -> e.getEventType().equals("SolicitudCancelada")));
   }
 
-  @Test void seguridadNoCreaUsuariosNiHabilitaBasicOFormLogin() throws Exception {
+  @Test
+  void seguridadNoCreaUsuariosNiHabilitaBasicOFormLogin() throws Exception {
     assertTrue(webContext.getBeansOfType(
         org.springframework.security.core.userdetails.UserDetailsService.class).isEmpty());
     var mvc = mockMvc();
@@ -237,10 +284,12 @@ class MySqlConcurrencyIT {
         .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
   }
 
-  @Test void openApiAutenticadoExponeFirebaseBearerEnNueveOperaciones() throws Exception {
+  @Test
+  void openApiAutenticadoExponeFirebaseBearerEnNueveOperaciones() throws Exception {
     String body = mockMvc().perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-        .get("/v3/api-docs").with(org.springframework.security.test.web.servlet.request
-            .SecurityMockMvcRequestPostProcessors.user("firebase-uid")))
+        .get("/v3/api-docs")
+        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
+            .user("firebase-uid")))
         .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
         .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
             .jsonPath("$.components.securitySchemes.firebaseBearer.scheme").value("bearer"))
@@ -256,14 +305,236 @@ class MySqlConcurrencyIT {
         .build();
   }
 
+  @Test
+  void extensionActualizaOcupacionEnMySql() throws Exception {
+
+    UUID request = pending(
+        UUID.randomUUID(), FROM, UNTIL);
+
+    UUID reservationId = service.aceptarSolicitud(lender, request).id();
+
+    LocalDateTime nuevaFecha = UNTIL.plusDays(2);
+
+    consumer.consume(loanEvent(
+        UUID.randomUUID(),
+        "FechaDevolucionActualizada",
+        1,
+        reservationId,
+        Map.of(
+            "cambio_fecha_prestamo_id",
+            UUID.randomUUID().toString(),
+            "tipo", "EXTENSION",
+            "devolucion_anterior_en", UNTIL.toString(),
+            "devolucion_vigente_en", nuevaFecha.toString())));
+
+    Reserva stored = reservas.findById(reservationId)
+        .orElseThrow().toDomain();
+
+    assertEquals(nuevaFecha, stored.ocupacionHasta());
+
+    assertEquals(
+        UNTIL, stored.periodoContractual().hasta());
+
+    assertEquals(
+        new BigDecimal("10.00"),
+        stored.condiciones().tarifaDiaria());
+
+    assertEquals(1, processed.count());
+  }
+
+  @Test
+  void extensionBloqueaNuevasReservasSuperpuestas()
+      throws Exception {
+
+    UUID request = pending(
+        UUID.randomUUID(), FROM, UNTIL);
+
+    UUID reservationId = service.aceptarSolicitud(lender, request).id();
+
+    LocalDateTime nuevaFecha = UNTIL.plusDays(2);
+
+    consumer.consume(loanEvent(
+        UUID.randomUUID(),
+        "FechaDevolucionActualizada",
+        1,
+        reservationId,
+        Map.of(
+            "cambio_fecha_prestamo_id",
+            UUID.randomUUID().toString(),
+            "tipo", "EXTENSION",
+            "devolucion_anterior_en", UNTIL.toString(),
+            "devolucion_vigente_en", nuevaFecha.toString())));
+
+    UUID second = pending(
+        UUID.randomUUID(),
+        UNTIL.plusHours(1),
+        nuevaFecha);
+
+    assertThrows(
+        BusinessConflictException.class,
+        () -> service.aceptarSolicitud(lender, second));
+
+    assertEquals(1, reservas.count());
+  }
+
+  @Test
+  void extensionSuperpuestaRevierteTransaccion()
+      throws Exception {
+
+    UUID first = pending(
+        UUID.randomUUID(), FROM, UNTIL);
+
+    UUID reservationId = service.aceptarSolicitud(lender, first).id();
+
+    UUID second = pending(
+        UUID.randomUUID(),
+        UNTIL,
+        UNTIL.plusDays(2));
+
+    service.aceptarSolicitud(lender, second);
+
+    assertThrows(
+        IllegalStateException.class,
+        () -> consumer.consume(loanEvent(
+            UUID.randomUUID(),
+            "FechaDevolucionActualizada",
+            1,
+            reservationId,
+            Map.of(
+                "cambio_fecha_prestamo_id",
+                UUID.randomUUID().toString(),
+                "tipo", "EXTENSION",
+                "devolucion_anterior_en", UNTIL.toString(),
+                "devolucion_vigente_en",
+                UNTIL.plusDays(1).toString()))));
+
+    Reserva stored = reservas.findById(reservationId)
+        .orElseThrow().toDomain();
+
+    assertEquals(UNTIL, stored.ocupacionHasta());
+
+    assertEquals(0, processed.count());
+    assertEquals(2, reservas.count());
+  }
+
+  @Test
+  void retencionYConfirmacionConcurrenteNoOcupanElMismoTramo() throws Exception {
+    UUID first = pending(UUID.randomUUID(), FROM, UNTIL);
+    UUID reserva = service.aceptarSolicitud(lender, first).id();
+    UUID second = pending(UUID.randomUUID(), UNTIL, UNTIL.plusDays(2));
+    UUID change = UUID.randomUUID();
+    UUID loan = UUID.randomUUID();
+    var payload = Map.<String, Object>of("cambio_fecha_prestamo_id", change, "prestamo_id", loan,
+        "fecha_anterior_en", UNTIL.toString(), "fecha_propuesta_en", UNTIL.plusDays(1).toString());
+    var hold = loanEvent(UUID.randomUUID(), "ExtensionRetencionSolicitada", 1, reserva, payload);
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var start = new CountDownLatch(1);
+      var requested = pool.submit(() -> { start.await(); consumer.consume(hold); return true; });
+      var acceptedFuture = pool.submit(() -> { start.await(); return attempt(second); });
+      start.countDown();
+      assertTrue(requested.get(30, TimeUnit.SECONDS));
+      boolean accepted = acceptedFuture.get(30, TimeUnit.SECONDS);
+      var confirmation = loanEvent(UUID.randomUUID(), "ExtensionConfirmacionSolicitada", 2, reserva, payload);
+      consumer.consume(confirmation);
+      consumer.consume(confirmation);
+      assertEquals(accepted ? UNTIL : UNTIL.plusDays(1), reservas.findById(reserva).orElseThrow().toDomain().ocupacionHasta());
+      assertEquals(accepted ? 2 : 1, reservas.count());
+    }
+  }
+
+  @Test
+  void extensionYAceptacionConcurrentesNoGeneranSuperposicion()
+      throws Exception {
+
+    UUID first = pending(
+        UUID.randomUUID(), FROM, UNTIL);
+
+    UUID reservationId = service.aceptarSolicitud(lender, first).id();
+
+    UUID second = pending(
+        UUID.randomUUID(),
+        UNTIL,
+        UNTIL.plusDays(2));
+
+    byte[] event = loanEvent(
+        UUID.randomUUID(),
+        "FechaDevolucionActualizada",
+        1,
+        reservationId,
+        Map.of(
+            "cambio_fecha_prestamo_id",
+            UUID.randomUUID().toString(),
+            "tipo", "EXTENSION",
+            "devolucion_anterior_en", UNTIL.toString(),
+            "devolucion_vigente_en",
+            UNTIL.plusDays(1).toString()));
+
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+
+    CountDownLatch start = new CountDownLatch(1);
+
+    try {
+      Future<Boolean> extension = pool.submit(() -> {
+        start.await();
+
+        try {
+          consumer.consume(event);
+          return true;
+        } catch (IllegalStateException exception) {
+          return false;
+        }
+      });
+
+      Future<Boolean> acceptance = pool.submit(() -> {
+        start.await();
+        return attempt(second);
+      });
+
+      start.countDown();
+
+      boolean extended = extension.get(30, TimeUnit.SECONDS);
+
+      boolean accepted = acceptance.get(30, TimeUnit.SECONDS);
+
+      assertTrue(extended ^ accepted,
+          "Solo una operacion debe tener exito");
+
+      Reserva stored = reservas.findById(reservationId)
+          .orElseThrow().toDomain();
+
+      assertEquals(
+          extended ? UNTIL.plusDays(1) : UNTIL,
+          stored.ocupacionHasta());
+
+      assertEquals(
+          extended ? 1L : 2L,
+          reservas.count());
+
+      assertEquals(
+          extended ? 1L : 0L,
+          processed.count());
+
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
   private boolean attempt(UUID id) {
-    try { service.aceptarSolicitud(lender, id); return true; }
-    catch (BusinessConflictException exception) { return false; }
+    try {
+      service.aceptarSolicitud(lender, id);
+      return true;
+    } catch (BusinessConflictException exception) {
+      return false;
+    }
   }
 
   private boolean createAttempt(CrearSolicitudCommand command) {
-    try { service.crearSolicitud(command); return true; }
-    catch (BusinessConflictException exception) { return false; }
+    try {
+      service.crearSolicitud(command);
+      return true;
+    } catch (BusinessConflictException exception) {
+      return false;
+    }
   }
 
   private CrearSolicitudCommand command(UUID borrower, LocalDateTime from, LocalDateTime until) {
@@ -284,6 +555,7 @@ class MySqlConcurrencyIT {
       Map<String, Object> additionalPayload) throws Exception {
     Map<String, Object> payload = new LinkedHashMap<>(additionalPayload);
     payload.put("reserva_id", reservationId);
+    payload.put("publicacion_id", publication.toString());
     return json.writeValueAsBytes(Map.of("event_id", eventId, "event_type", type,
         "event_version", 1, "aggregate_id", reservationId, "aggregate_version", version,
         "occurred_at", Instant.now(), "correlation_id", "corr", "payload", payload));
@@ -296,16 +568,36 @@ class MySqlConcurrencyIT {
 
   @TestConfiguration
   static class StubConfiguration {
-    @Bean @Primary TestCatalogo testCatalogo() { return new TestCatalogo(); }
-    @Bean @Primary SolicitudEligibilityPort eligibility() {
+    @Bean
+    @Primary
+    TestCatalogo testCatalogo() {
+      return new TestCatalogo();
+    }
+
+    @Bean
+    @Primary
+    SolicitudEligibilityPort eligibility() {
       return ignored -> new SolicitudEligibilityPort.EligibilityFacts(
           EstadoComprobacion.CUMPLE, EstadoComprobacion.CUMPLE);
     }
-    @Bean @Primary TestPrestamoAccess testPrestamoAccess() { return new TestPrestamoAccess(); }
-    @Bean @Primary IdentidadPort testIdentity() {
+
+    @Bean
+    @Primary
+    TestPrestamoAccess testPrestamoAccess() {
+      return new TestPrestamoAccess();
+    }
+
+    @Bean
+    @Primary
+    IdentidadPort testIdentity() {
       return new IdentidadPort() {
-        public UUID resolverUsuarioId(String ignored) { return UUID.randomUUID(); }
-        public String obtenerTelefonoAutorizado(UUID ignored, UUID reservation) { return "999999999"; }
+        public UUID resolverUsuarioId(String ignored) {
+          return UUID.randomUUID();
+        }
+
+        public String obtenerTelefonoAutorizado(UUID ignored, UUID reservation) {
+          return "999999999";
+        }
       };
     }
   }
@@ -313,6 +605,7 @@ class MySqlConcurrencyIT {
   static class TestCatalogo implements CatalogoPort {
     final AtomicReference<UUID> owner = new AtomicReference<>();
     final AtomicReference<CondicionesAcordadas> conditions = new AtomicReference<>();
+
     public PublicacionSnapshot obtenerSnapshot(UUID id, PeriodoPrestamo period) {
       return new PublicacionSnapshot(id, owner.get(), true, true, SNAPSHOT_ID,
           SNAPSHOT_HASH, conditions.get());
@@ -321,7 +614,10 @@ class MySqlConcurrencyIT {
 
   static class TestPrestamoAccess implements PrestamoAccessPort {
     volatile boolean allowed = true;
-    public boolean contactoVigente(UUID reservationId, UUID participantId) { return allowed; }
+
+    public boolean contactoVigente(UUID reservationId, UUID participantId) {
+      return allowed;
+    }
   }
 
   private static final LocalDateTime FROM = LocalDateTime.of(2026, 11, 10, 9, 0);

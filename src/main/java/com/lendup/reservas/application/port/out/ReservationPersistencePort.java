@@ -15,6 +15,7 @@ public interface ReservationPersistencePort {
   List<Solicitud> findSolicitudes(UUID actor, boolean admin, String rol, String estado);
   void ensureAgenda(UUID publicacionId);
   AgendaDelObjeto lockAgenda(UUID publicacionId);
+  void lockAgendaForReservation(UUID reservaId);
   boolean existsCommittedOverlap(UUID publicacionId, LocalDateTime desde, LocalDateTime hasta);
   boolean existsPendingDuplicate(UUID publicacionId, UUID prestatarioId,
       LocalDateTime desde, LocalDateTime hasta);

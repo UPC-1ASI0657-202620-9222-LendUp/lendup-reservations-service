@@ -6,8 +6,10 @@ import com.lendup.reservas.application.port.out.ReservationPersistencePort;
 import com.lendup.reservas.domain.model.*;
 import com.lendup.reservas.infrastructure.persistence.entity.*;
 import com.lendup.reservas.infrastructure.persistence.repository.*;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -18,12 +20,18 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
   private final SolicitudJpaRepository solicitudes;
   private final AgendaJpaRepository agendas;
   private final ReservaJpaRepository reservas;
+  private final ExtensionHoldStore holds;
+  private final Clock clock;
+  @Value("${LENDUP_CANCELLATIONS_RECOVERY:false}")
+  private boolean keepCustodyUntilDecision;
 
   public JpaReservationAdapter(SolicitudJpaRepository solicitudes,
-      AgendaJpaRepository agendas, ReservaJpaRepository reservas) {
+      AgendaJpaRepository agendas, ReservaJpaRepository reservas, ExtensionHoldStore holds, Clock clock) {
     this.solicitudes = solicitudes;
     this.agendas = agendas;
     this.reservas = reservas;
+    this.holds = holds;
+    this.clock = clock;
   }
 
   @Override
@@ -62,17 +70,29 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
   @Override public AgendaDelObjeto lockAgenda(UUID publicacionId) {
     AgendaEntity agenda = agendas.lockByPublicationId(publicacionId)
         .orElseThrow(() -> new NotFoundException("Agenda no inicializada"));
-    List<AgendaDelObjeto.Bloqueo> bloqueos = reservas.findBlockingByAgendaId(agenda.getId())
+    // Una proyección escalar evita precargar ReservaEntity antes del lock de reserva.
+    List<AgendaDelObjeto.Bloqueo> bloqueos = new ArrayList<>(reservas.findBlockingByAgendaId(agenda.getId())
         .stream().map(entity -> new AgendaDelObjeto.Bloqueo(entity.getId(),
-            new PeriodoPrestamo(entity.getOcupacionDesde(), entity.getOcupacionHasta()),
-            entity.getEstado())).toList();
+            new PeriodoPrestamo(entity.getDesde(), keepCustodyUntilDecision && entity.getEstado() == EstadoReserva.CANCELACION_PENDIENTE
+                ? LocalDateTime.MAX : entity.getHasta()),
+            entity.getEstado())).toList());
+    for (var hold : holds.active(publicacionId, clock.instant())) {
+      bloqueos.add(new AgendaDelObjeto.Bloqueo(hold.changeId(),
+          new PeriodoPrestamo(hold.startsAt(), hold.endsAt()), EstadoReserva.CONFIRMADA));
+    }
     return new AgendaDelObjeto(agenda.getId(), agenda.getPublicacionId(), agenda.getVersion(),
         bloqueos);
   }
 
+  @Override public void lockAgendaForReservation(UUID reservaId) {
+    UUID publicationId = reservas.findPublicationId(reservaId)
+        .orElseThrow(() -> new NotFoundException("Reserva no encontrada"));
+    agendas.lockByPublicationId(publicationId).orElseThrow(() -> new NotFoundException("Agenda no inicializada"));
+  }
+
   @Override public boolean existsCommittedOverlap(UUID publicacionId, LocalDateTime desde,
       LocalDateTime hasta) {
-    return reservas.existsCommittedOverlap(publicacionId, desde, hasta);
+    return reservas.existsCommittedOverlap(publicacionId, desde, hasta, keepCustodyUntilDecision);
   }
 
   @Override public boolean existsPendingDuplicate(UUID publicacionId, UUID prestatarioId,
