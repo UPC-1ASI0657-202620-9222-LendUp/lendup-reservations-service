@@ -9,6 +9,7 @@ import com.lendup.reservas.infrastructure.persistence.repository.*;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -21,6 +22,8 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
   private final ReservaJpaRepository reservas;
   private final ExtensionHoldStore holds;
   private final Clock clock;
+  @Value("${LENDUP_CANCELLATIONS_RECOVERY:false}")
+  private boolean keepCustodyUntilDecision;
 
   public JpaReservationAdapter(SolicitudJpaRepository solicitudes,
       AgendaJpaRepository agendas, ReservaJpaRepository reservas, ExtensionHoldStore holds, Clock clock) {
@@ -70,7 +73,8 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
     // Una proyección escalar evita precargar ReservaEntity antes del lock de reserva.
     List<AgendaDelObjeto.Bloqueo> bloqueos = new ArrayList<>(reservas.findBlockingByAgendaId(agenda.getId())
         .stream().map(entity -> new AgendaDelObjeto.Bloqueo(entity.getId(),
-            new PeriodoPrestamo(entity.getDesde(), entity.getHasta()),
+            new PeriodoPrestamo(entity.getDesde(), keepCustodyUntilDecision && entity.getEstado() == EstadoReserva.CANCELACION_PENDIENTE
+                ? LocalDateTime.MAX : entity.getHasta()),
             entity.getEstado())).toList());
     for (var hold : holds.active(publicacionId, clock.instant())) {
       bloqueos.add(new AgendaDelObjeto.Bloqueo(hold.changeId(),
@@ -80,9 +84,15 @@ public class JpaReservationAdapter implements ReservationPersistencePort {
         bloqueos);
   }
 
+  @Override public void lockAgendaForReservation(UUID reservaId) {
+    UUID publicationId = reservas.findPublicationId(reservaId)
+        .orElseThrow(() -> new NotFoundException("Reserva no encontrada"));
+    agendas.lockByPublicationId(publicationId).orElseThrow(() -> new NotFoundException("Agenda no inicializada"));
+  }
+
   @Override public boolean existsCommittedOverlap(UUID publicacionId, LocalDateTime desde,
       LocalDateTime hasta) {
-    return reservas.existsCommittedOverlap(publicacionId, desde, hasta);
+    return reservas.existsCommittedOverlap(publicacionId, desde, hasta, keepCustodyUntilDecision);
   }
 
   @Override public boolean existsPendingDuplicate(UUID publicacionId, UUID prestatarioId,

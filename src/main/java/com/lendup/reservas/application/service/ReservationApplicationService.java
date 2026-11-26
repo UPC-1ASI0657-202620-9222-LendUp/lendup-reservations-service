@@ -193,9 +193,10 @@ public class ReservationApplicationService implements ReservationUseCases {
   }
 
   @Override
-  @Transactional
+  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public ReservaView solicitarCancelacionReserva(UUID actor, boolean admin, UUID id,
       String motivo, String correlationId) {
+    persistence.lockAgendaForReservation(id);
     Reserva reserva = persistence.lockReserva(id)
         .orElseThrow(() -> new NotFoundException("Reserva no encontrada"));
     Solicitud solicitud = persistence.findSolicitudForReserva(id)

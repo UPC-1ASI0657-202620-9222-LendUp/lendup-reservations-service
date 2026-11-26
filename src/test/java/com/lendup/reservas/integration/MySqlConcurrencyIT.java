@@ -32,6 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "spring.rabbitmq.listener.simple.auto-startup=false",
     "lendup.outbox.relay-delay-ms=3600000",
+    "LENDUP_CANCELLATIONS_RECOVERY=true",
     "spring.datasource.hikari.maximum-pool-size=25",
     "springdoc.api-docs.enabled=true",
     "springdoc.swagger-ui.enabled=true" })
@@ -160,6 +161,22 @@ class MySqlConcurrencyIT {
     UUID second = pending(UUID.randomUUID(), FROM.plusHours(1), UNTIL.plusHours(1));
     assertThrows(BusinessConflictException.class,
         () -> service.aceptarSolicitud(lender, second));
+  }
+
+  @Test
+  void custodiaPendienteBloqueaMasAllaDelContratoHastaLaRecuperacion() throws Exception {
+    UUID request = pending(UUID.randomUUID(), FROM, UNTIL);
+    UUID reservation = service.aceptarSolicitud(lender, request).id();
+    service.solicitarCancelacionReserva(lender, false, reservation, "Recuperar objeto", "corr");
+    LocalDateTime from = UNTIL.plusHours(1);
+    LocalDateTime to = from.plusHours(2);
+    UUID rival = pending(UUID.randomUUID(), from, to);
+    assertThrows(BusinessConflictException.class, () -> service.aceptarSolicitud(lender, rival));
+    assertThrows(BusinessConflictException.class,
+        () -> service.crearSolicitud(command(UUID.randomUUID(), from, to)));
+    assertEquals(UNTIL, reservas.findById(reservation).orElseThrow().toDomain().ocupacionHasta());
+    consumer.consume(loanEvent(UUID.randomUUID(), "PrestamoCancelado", 5, reservation, Map.of()));
+    assertEquals(EstadoReserva.CONFIRMADA.name(), service.aceptarSolicitud(lender, rival).estado());
   }
 
   @Test
