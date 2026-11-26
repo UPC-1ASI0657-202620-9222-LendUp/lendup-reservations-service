@@ -62,6 +62,14 @@ public class RabbitConfiguration {
   }
 
   @Bean
+  org.springframework.amqp.core.Declarables extensionBindings(Queue loanEventsQueue, TopicExchange domainExchange) {
+    return new org.springframework.amqp.core.Declarables(java.util.stream.Stream.of(
+          "prestamos.extension-retencion-solicitada.v1", "prestamos.extension-confirmacion-solicitada.v1",
+          "prestamos.extension-retencion-cancelada.v1")
+        .map(key -> (org.springframework.amqp.core.Declarable) BindingBuilder.bind(loanEventsQueue).to(domainExchange).with(key)).toList());
+  }
+
+  @Bean
   Binding dlqBinding(Queue loanEventsDlq, DirectExchange deadLetterExchange) {
     return BindingBuilder.bind(loanEventsDlq).to(deadLetterExchange).with(DLQ);
   }
