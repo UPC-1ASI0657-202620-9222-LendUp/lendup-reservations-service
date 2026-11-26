@@ -171,9 +171,16 @@ public class LoanEventConsumer {
       String correlation = String.valueOf(event.getOrDefault("correlation_id", ""));
       audit.record("RESERVA", reservationId, "APLICAR_" + type, previous, reservation.estado().name(), null,
           correlation);
-      if (type.equals("PrestamoCancelado"))
+      if (type.equals("PrestamoCancelado")) {
+        Map<String, Object> cancellation = new LinkedHashMap<>();
+        cancellation.put("reserva_id", reservationId);
+        cancellation.put("solicitud_id", request.id());
+        if (payload.get("incidencias_resueltas") instanceof List<?> incidents) {
+          cancellation.put("incidencias_resueltas", incidents.stream().map(id -> UUID.fromString(id.toString())).toList());
+        }
         outbox.append(new EventEnvelope(UUID.randomUUID(), "ReservaCancelada", 1, reservation.aggregateVersion(),
-            reservationId, now, correlation, Map.of("reserva_id", reservationId, "solicitud_id", request.id())));
+            reservationId, now, correlation, cancellation));
+      }
     }
   }
 

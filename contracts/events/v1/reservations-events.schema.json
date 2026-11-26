@@ -71,6 +71,8 @@
       }
     },
     "cancelacionSolicitada": { "type": "object", "additionalProperties": false, "required": ["reserva_id", "solicitud_id", "solicitada_por_usuario_id", "motivo_cancelacion"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" }, "solicitada_por_usuario_id": { "type": "string", "format": "uuid" }, "motivo_cancelacion": { "type": "string", "minLength": 1, "maxLength": 1000 } } },
-    "reservaCancelada": { "type": "object", "additionalProperties": false, "required": ["reserva_id", "solicitud_id"], "properties": { "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" } } }
+    "reservaCancelada": { "type": "object", "additionalProperties": false, "required": ["reserva_id", "solicitud_id"], "properties": {
+      "reserva_id": { "type": "string", "format": "uuid" }, "solicitud_id": { "type": "string", "format": "uuid" },
+      "incidencias_resueltas": { "type": "array", "uniqueItems": true, "items": { "type": "string", "format": "uuid" } } } }
   }
 }

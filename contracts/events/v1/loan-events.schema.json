@@ -55,6 +55,11 @@
           "type": "string",
           "format": "uuid"
         },
+        "incidencias_resueltas": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uuid" }
+        },
         "publicacion_id": {
           "type": "string",
           "format": "uuid"
