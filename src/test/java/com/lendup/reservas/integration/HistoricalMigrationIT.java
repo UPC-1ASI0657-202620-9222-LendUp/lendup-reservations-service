@@ -22,7 +22,10 @@ class HistoricalMigrationIT {
 
     Flyway latest = Flyway.configure().dataSource(mysql.getJdbcUrl(), mysql.getUsername(),
         mysql.getPassword()).load();
-    assertEquals(2, latest.migrate().migrationsExecuted);
+    assertEquals(3, latest.migrate().migrationsExecuted);
+    assertEquals(
+    "4",
+    latest.info().current().getVersion().getVersion());
 
     try (Connection connection = DriverManager.getConnection(mysql.getJdbcUrl(),
         mysql.getUsername(), mysql.getPassword())) {

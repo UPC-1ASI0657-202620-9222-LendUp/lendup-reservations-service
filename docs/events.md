@@ -13,6 +13,7 @@ Exchange durable: `lendup.domain.events` (topic). DLX: `lendup.domain.events.dlx
 | Consume | `PrestamoCancelado` v1 | `prestamos.cancelado.v1` | Cancela y libera periodo |
 | Consume | `CancelacionRechazada` v1 | `prestamos.cancelacion-rechazada.v1` | Conserva periodo y vuelve a confirmada |
 | Consume | `PeriodoPrestamoLiberado` v1 | `prestamos.periodo-liberado.v1` | Acorta futuro ocupado, idempotente |
+| Consume | `FechaDevolucionActualizada` v1 | `prestamos.fecha-devolucion-actualizada.v1` | Actualiza el periodo ocupado sin modificar el contrato original |
 
 Envelope: `event_id`, `event_type`, `event_version`, `aggregate_version`, `aggregate_id`, `occurred_at` UTC, `correlation_id`, `payload`. Schemas y ejemplos están en `contracts/events/v1`.
 
@@ -21,3 +22,17 @@ El relay reclama con una transacción corta y `FOR UPDATE SKIP LOCKED`; publica 
 `PeriodoPrestamoLiberado` solo es válido con `decision=LIBERACION_CONFIRMADA`, `devolucion_confirmada_por_prestamista=true` e `incidencias_pendientes=false`. La aplicación acorta la ocupación, conserva el periodo contractual y rechaza fechas arbitrarias, duplicados y versiones atrasadas.
 
 Los consumidores de Préstamos y Notificaciones del monolito inspeccionado todavía no implementan estos contratos; publicar no constituye una integración end-to-end exitosa.
+
+## Actualización del periodo ocupado
+
+Reservas consume el evento `FechaDevolucionActualizada` emitido por Préstamos cuando se confirma el pago de una extensión o se acepta una reprogramación.
+
+El consumidor actualiza `ocupacion_hasta` utilizando `devolucion_vigente_en`, conservando el periodo contractual, las condiciones económicas acordadas y la evidencia de aceptación original.
+
+La operación utiliza Inbox para evitar el procesamiento duplicado de eventos, control de versiones del agregado, bloqueo de agenda y una transacción local para persistir los cambios.
+
+Si la nueva fecha genera una superposición con otra reserva, se revierte la transacción local y se aplica la política de reintentos y DLQ.
+
+La migración V4 permite que la ocupación efectiva supere el periodo contractual original.
+
+Como limitación, la validación local no garantiza por sí sola la consistencia distribuida de las extensiones. Se requiere coordinación previa entre Préstamos y Reservas o un mecanismo de compensación ante conflictos posteriores al pago.

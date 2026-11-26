@@ -35,8 +35,9 @@ public final class Reserva {
     this.agendaId = Objects.requireNonNull(agendaId, "La agenda es obligatoria");
     this.periodoContractual = Objects.requireNonNull(periodoContractual, "El periodo contractual es obligatorio");
     this.ocupacionHasta = Objects.requireNonNull(ocupacionHasta, "El fin de ocupación es obligatorio");
-    if (!ocupacionHasta.isAfter(periodoContractual.desde()) || ocupacionHasta.isAfter(periodoContractual.hasta())) {
-      throw new IllegalArgumentException("El periodo de ocupación debe estar dentro del periodo contractual");
+    if (!ocupacionHasta.isAfter(periodoContractual.desde())) {
+      throw new IllegalArgumentException(
+          "El fin de ocupación debe ser posterior al inicio contractual");
     }
     this.periodoLiberadoDesde = periodoLiberadoDesde;
     this.condiciones = Objects.requireNonNull(condiciones, "Las condiciones son obligatorias");
@@ -47,7 +48,8 @@ public final class Reserva {
     this.canceladaEn = canceladaEn;
     this.canceladaPorUsuarioId = canceladaPorUsuarioId;
     this.motivoCancelacion = motivoCancelacion;
-    if (externalEventVersion < 0 || aggregateVersion < 1) throw new IllegalArgumentException("Versiones inválidas");
+    if (externalEventVersion < 0 || aggregateVersion < 1)
+      throw new IllegalArgumentException("Versiones inválidas");
     this.externalEventVersion = externalEventVersion;
     this.aggregateVersion = aggregateVersion;
     this.actualizadaEn = Objects.requireNonNull(actualizadaEn, "La actualización es obligatoria");
@@ -75,8 +77,10 @@ public final class Reserva {
   }
 
   public void solicitarCancelacion(UUID actor, String motivo, Instant now) {
-    if (estado != EstadoReserva.CONFIRMADA) throw new IllegalStateException("Reserva no confirmada");
-    if (motivo == null || motivo.isBlank()) throw new IllegalArgumentException("El motivo es obligatorio");
+    if (estado != EstadoReserva.CONFIRMADA)
+      throw new IllegalStateException("Reserva no confirmada");
+    if (motivo == null || motivo.isBlank())
+      throw new IllegalArgumentException("El motivo es obligatorio");
     estado = EstadoReserva.CANCELACION_PENDIENTE;
     cancelacionSolicitadaEn = now;
     canceladaPorUsuarioId = Objects.requireNonNull(actor);
@@ -85,7 +89,8 @@ public final class Reserva {
   }
 
   public boolean aplicarPrestamoCancelado(long version, Instant now) {
-    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CANCELACION_PENDIENTE) return false;
+    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CANCELACION_PENDIENTE)
+      return false;
     externalEventVersion = version;
     estado = EstadoReserva.CANCELADA;
     canceladaEn = now;
@@ -94,7 +99,8 @@ public final class Reserva {
   }
 
   public boolean aplicarCancelacionRechazada(long version, Instant now) {
-    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CANCELACION_PENDIENTE) return false;
+    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CANCELACION_PENDIENTE)
+      return false;
     externalEventVersion = version;
     estado = EstadoReserva.CONFIRMADA;
     cancelacionSolicitadaEn = null;
@@ -102,10 +108,35 @@ public final class Reserva {
     return true;
   }
 
+  public boolean aplicarActualizacionPeriodo(
+      long version, LocalDateTime nuevoHasta, Instant now) {
+
+    if (!aceptarVersionExterna(version)
+        || (estado != EstadoReserva.CONFIRMADA
+    && estado != EstadoReserva.CANCELACION_PENDIENTE)
+        || periodoLiberadoDesde != null) {
+      return false;
+    }
+
+    if (nuevoHasta == null
+        || !nuevoHasta.isAfter(periodoContractual.desde())) {
+      throw new IllegalArgumentException(
+          "La nueva fecha de ocupación no es válida");
+    }
+
+    externalEventVersion = version;
+    ocupacionHasta = nuevoHasta;
+
+    actualizar(now);
+    return true;
+  }
+
   public boolean aplicarLiberacionConfirmada(long version, LocalDateTime nuevoHasta, Instant now) {
-    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CONFIRMADA) return false;
+    if (!aceptarVersionExterna(version) || estado != EstadoReserva.CONFIRMADA)
+      return false;
     if (nuevoHasta == null || !nuevoHasta.isAfter(periodoContractual.desde())
-        || !nuevoHasta.isBefore(ocupacionHasta)) return false;
+        || !nuevoHasta.isBefore(ocupacionHasta))
+      return false;
     externalEventVersion = version;
     ocupacionHasta = nuevoHasta;
     periodoLiberadoDesde = nuevoHasta;
@@ -113,29 +144,84 @@ public final class Reserva {
     return true;
   }
 
-  private boolean aceptarVersionExterna(long version) { return version > externalEventVersion; }
+  private boolean aceptarVersionExterna(long version) {
+    return version > externalEventVersion;
+  }
 
   private void actualizar(Instant now) {
     aggregateVersion = Math.incrementExact(aggregateVersion);
     actualizadaEn = Objects.requireNonNull(now);
   }
 
-  public UUID id() { return id; }
-  public UUID solicitudId() { return solicitudId; }
-  public UUID agendaId() { return agendaId; }
-  public PeriodoPrestamo periodoContractual() { return periodoContractual; }
-  public PeriodoPrestamo periodoOcupacion() { return new PeriodoPrestamo(periodoContractual.desde(), ocupacionHasta); }
-  public LocalDateTime ocupacionHasta() { return ocupacionHasta; }
-  public LocalDateTime periodoLiberadoDesde() { return periodoLiberadoDesde; }
-  public CondicionesAcordadas condiciones() { return condiciones; }
-  public AceptacionCondiciones aceptacionCondiciones() { return aceptacionCondiciones; }
-  public EstadoReserva estado() { return estado; }
-  public Instant confirmadaEn() { return confirmadaEn; }
-  public Instant cancelacionSolicitadaEn() { return cancelacionSolicitadaEn; }
-  public Instant canceladaEn() { return canceladaEn; }
-  public UUID canceladaPorUsuarioId() { return canceladaPorUsuarioId; }
-  public String motivoCancelacion() { return motivoCancelacion; }
-  public long externalEventVersion() { return externalEventVersion; }
-  public long aggregateVersion() { return aggregateVersion; }
-  public Instant actualizadaEn() { return actualizadaEn; }
+  public UUID id() {
+    return id;
+  }
+
+  public UUID solicitudId() {
+    return solicitudId;
+  }
+
+  public UUID agendaId() {
+    return agendaId;
+  }
+
+  public PeriodoPrestamo periodoContractual() {
+    return periodoContractual;
+  }
+
+  public PeriodoPrestamo periodoOcupacion() {
+    return new PeriodoPrestamo(periodoContractual.desde(), ocupacionHasta);
+  }
+
+  public LocalDateTime ocupacionHasta() {
+    return ocupacionHasta;
+  }
+
+  public LocalDateTime periodoLiberadoDesde() {
+    return periodoLiberadoDesde;
+  }
+
+  public CondicionesAcordadas condiciones() {
+    return condiciones;
+  }
+
+  public AceptacionCondiciones aceptacionCondiciones() {
+    return aceptacionCondiciones;
+  }
+
+  public EstadoReserva estado() {
+    return estado;
+  }
+
+  public Instant confirmadaEn() {
+    return confirmadaEn;
+  }
+
+  public Instant cancelacionSolicitadaEn() {
+    return cancelacionSolicitadaEn;
+  }
+
+  public Instant canceladaEn() {
+    return canceladaEn;
+  }
+
+  public UUID canceladaPorUsuarioId() {
+    return canceladaPorUsuarioId;
+  }
+
+  public String motivoCancelacion() {
+    return motivoCancelacion;
+  }
+
+  public long externalEventVersion() {
+    return externalEventVersion;
+  }
+
+  public long aggregateVersion() {
+    return aggregateVersion;
+  }
+
+  public Instant actualizadaEn() {
+    return actualizadaEn;
+  }
 }

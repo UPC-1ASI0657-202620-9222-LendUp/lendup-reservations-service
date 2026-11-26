@@ -75,6 +75,206 @@ class AggregatesTest {
     assertEquals(HASH, new AceptacionCondiciones("v1", HASH.toUpperCase(), now).snapshotHash());
   }
 
+  @Test
+void extensionConservaPeriodoContractualYCondiciones() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  PeriodoPrestamo original = reservation.periodoContractual();
+
+  LocalDateTime nuevoHasta = original.hasta().plusDays(2);
+
+  assertTrue(reservation.aplicarActualizacionPeriodo(
+      1, nuevoHasta, now.plusSeconds(1)));
+
+  assertEquals(nuevoHasta, reservation.ocupacionHasta());
+  assertEquals(original, reservation.periodoContractual());
+  assertEquals(request.condiciones(), reservation.condiciones());
+
+  assertEquals(
+      request.aceptacionCondiciones(),
+      reservation.aceptacionCondiciones());
+}
+
+@Test
+void extensionIgnoraVersionesDuplicadasYAntiguas() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  LocalDateTime nuevoHasta =
+      reservation.ocupacionHasta().plusDays(2);
+
+  assertTrue(reservation.aplicarActualizacionPeriodo(
+      3, nuevoHasta, now.plusSeconds(1)));
+
+  assertFalse(reservation.aplicarActualizacionPeriodo(
+      3, nuevoHasta.plusDays(1), now.plusSeconds(2)));
+
+  assertFalse(reservation.aplicarActualizacionPeriodo(
+      2, nuevoHasta.plusDays(1), now.plusSeconds(3)));
+
+  assertEquals(nuevoHasta, reservation.ocupacionHasta());
+  assertEquals(3L, reservation.externalEventVersion());
+}
+
+@Test
+void extensionRechazaFechaInvalida() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  LocalDateTime original = reservation.ocupacionHasta();
+
+  assertThrows(
+      IllegalArgumentException.class,
+      () -> reservation.aplicarActualizacionPeriodo(
+          1,
+          reservation.periodoContractual().desde(),
+          now.plusSeconds(1)));
+
+  assertEquals(original, reservation.ocupacionHasta());
+}
+
+@Test
+void permiteLiberacionDespuesDeExtension() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  PeriodoPrestamo original = reservation.periodoContractual();
+
+  LocalDateTime extendido = original.hasta().plusDays(3);
+  LocalDateTime liberado = extendido.minusDays(1);
+
+  assertTrue(reservation.aplicarActualizacionPeriodo(
+      1, extendido, now.plusSeconds(1)));
+
+  assertTrue(reservation.aplicarLiberacionConfirmada(
+      2, liberado, now.plusSeconds(2)));
+
+  assertEquals(liberado, reservation.ocupacionHasta());
+  assertEquals(liberado, reservation.periodoLiberadoDesde());
+  assertEquals(original, reservation.periodoContractual());
+
+  assertFalse(reservation.aplicarActualizacionPeriodo(
+      3, extendido.plusDays(1), now.plusSeconds(3)));
+}
+
+@Test
+void noPermiteExtensionDeReservaCancelada() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  LocalDateTime original = reservation.ocupacionHasta();
+
+  reservation.solicitarCancelacion(
+      request.prestatarioId(),
+      "Cancelacion de prueba",
+      now.plusSeconds(1));
+
+  assertTrue(reservation.aplicarPrestamoCancelado(
+      1, now.plusSeconds(2)));
+
+  assertFalse(reservation.aplicarActualizacionPeriodo(
+      2, original.plusDays(2), now.plusSeconds(3)));
+
+  assertEquals(EstadoReserva.CANCELADA, reservation.estado());
+  assertEquals(original, reservation.ocupacionHasta());
+}
+
+@Test
+void permiteActualizarDuranteCancelacionPendiente() {
+  Solicitud request = request(
+      UUID.randomUUID(), UUID.randomUUID());
+
+  Reserva reservation = new ReservaFactory()
+      .crearConfirmada(
+          UUID.randomUUID(),
+          request,
+          new AgendaDelObjeto(
+              UUID.randomUUID(),
+              request.publicacionId(),
+              0,
+              List.of()),
+          now);
+
+  LocalDateTime nuevoHasta =
+      reservation.ocupacionHasta().plusDays(2);
+
+  reservation.solicitarCancelacion(
+      request.prestatarioId(),
+      "Cancelacion pendiente",
+      now.plusSeconds(1));
+
+  assertTrue(reservation.aplicarActualizacionPeriodo(
+      1, nuevoHasta, now.plusSeconds(2)));
+
+  assertEquals(nuevoHasta, reservation.ocupacionHasta());
+
+  assertEquals(
+      EstadoReserva.CANCELACION_PENDIENTE,
+      reservation.estado());
+
+  assertTrue(reservation.aplicarCancelacionRechazada(
+      2, now.plusSeconds(3)));
+
+  assertEquals(EstadoReserva.CONFIRMADA, reservation.estado());
+  assertEquals(nuevoHasta, reservation.ocupacionHasta());
+}
+
   private Solicitud request(UUID borrower, UUID lender) {
     return Solicitud.crear(UUID.randomUUID(), UUID.randomUUID(), borrower, lender,
         new PeriodoPrestamo(LocalDateTime.of(2026, 11, 10, 9, 0),
