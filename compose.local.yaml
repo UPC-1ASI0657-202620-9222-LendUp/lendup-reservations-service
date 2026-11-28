@@ -1,0 +1,16 @@
+services:
+  reservations:
+    ports: !override
+      - "127.0.0.1:8181:8081"
+    environment:
+      FIREBASE_AUTH_EMULATOR_HOST: host.docker.internal:9099
+      IDENTITY_SERVICE_TOKEN: ${RESERVATIONS_LOCAL_IDENTITY_TOKEN:?Token requerido}
+
+  mysql:
+    ports: !override
+      - "127.0.0.1:3317:3306"
+    volumes: !override
+      - mysql-data-local-v2:/var/lib/mysql
+
+volumes:
+  mysql-data-local-v2:
